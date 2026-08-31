@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "claim": "Example: service is offered in a defined market",
+      "kind": "project-fact",
+      "source": "verified project brief or public page URL",
+      "confidence": "observed",
+      "observedOn": "YYYY-MM-DD",
+      "status": "active"
+    }
+  ]
+}

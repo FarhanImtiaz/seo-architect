@@ -1,0 +1,12 @@
+{
+  "domain": "https://flowmend.dev",
+  "projectName": "Flowmend",
+  "primaryMarket": "India",
+  "secondaryMarkets": [],
+  "businessType": "web design / web development agency",
+  "framework": "auto",
+  "canonicalHost": "https://flowmend.dev",
+  "locale": "en-IN",
+  "tracking": {"searchConsole": false, "bingWebmaster": false, "analytics": false},
+  "mode": "active"
+}

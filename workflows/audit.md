@@ -1,0 +1,3 @@
+# Audit, technical, and fix
+
+Run framework, route, metadata, sitemap, robots, JSON-LD, links, evidence-ledger, and regression checks where applicable. Audit technical, on-page, content, schema, AEO, and conditional local/ecommerce concerns. Every finding has severity (CRITICAL/HIGH/MEDIUM/LOW/INFO), evidence label (observed/inference/hypothesis/unavailable), impact, recommended fix, automation level, and path. Score only evidenced categories out of 100 (technical 20, IA 10, on-page 15, content 15, links 10, schema 10, performance 5, local 5, AEO 10); label it internal prioritization. `fix` implements only safe, evidenced items and leaves review-first items as a proposal.
