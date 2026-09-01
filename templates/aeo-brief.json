@@ -1,0 +1,11 @@
+{
+  "page": "/example",
+  "primaryQuestionOrOffer": "Verified plain-language answer",
+  "audience": "Defined audience",
+  "conditionsAndLimits": "Visible qualifying conditions",
+  "firstPartyEvidence": "Evidence ledger entry or visible source",
+  "entityIdentity": "Verified organization/author context",
+  "freshness": "Date or review cadence when needed",
+  "schemaReview": "Visible-content-aligned schema decision",
+  "measurement": "Authorized data source or unavailable"
+}

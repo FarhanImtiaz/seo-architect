@@ -78,6 +78,8 @@ python3 /path/to/seo-architect/scripts/framework_inspect.py .
 python3 /path/to/seo-architect/scripts/framework_adapters.py .
 python3 /path/to/seo-architect/scripts/evidence_ledger.py verify .
 python3 /path/to/seo-architect/scripts/validate_page_contract.py service .
+python3 /path/to/seo-architect/scripts/validate_aeo.py .
+python3 /path/to/seo-architect/scripts/full_audit.py . --initialize --snapshot
 ```
 
 Read [references/seo-principles.md](references/seo-principles.md) for shared quality rules, then only the relevant one-hop reference for technical work, content, IA, links, schema, AEO, local/ecommerce, images, performance, research, migration, or measurement. Use templates in `templates/` when creating state or reports.
@@ -89,3 +91,5 @@ After first invocation, the Guardian hook runs before `Write` and `Edit` operati
 ## Output
 
 Keep outputs compact. Audits show a transparent 100-point category score only when there is enough evidence, severity, evidence, impact, fix, automation level, and file/path. State that it is an internal prioritization score, not a Google/Bing score or ranking prediction. Implementations list Changed, Validated, SEO impact, and Remaining.
+
+On first call in a project, run `full_audit.py <project> --initialize --snapshot` before strategy work. It is the deterministic baseline—not a substitute for judgment, rendered checks, or authorized measurement data.

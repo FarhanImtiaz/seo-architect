@@ -8,7 +8,7 @@ See [INSTALL.md](INSTALL.md). Claude Code discovers global skills at `~/.claude/
 
 ## Start
 
-Run `/seo-architect setup`, then `/seo-architect audit`. State is created in the target project at `.claude/seo/`; it contains no credentials. Common commands are `status`, `technical`, `page "topic"`, `optimize <path>`, `keywords`, `content`, `schema`, `links`, `aeo`, `local`, `ecommerce`, `launch`, `report`, and `fix`.
+Run `/seo-architect setup`, then `/seo-architect audit`. State is created in the target project at `.claude/seo/`; it contains no credentials. The deterministic one-command baseline is `python3 /path/to/seo-architect/scripts/full_audit.py . --initialize --snapshot`. Common commands are `status`, `technical`, `page "topic"`, `optimize <path>`, `keywords`, `content`, `schema`, `links`, `aeo`, `local`, `ecommerce`, `launch`, `report`, and `fix`.
 
 ## Automation boundaries
 
