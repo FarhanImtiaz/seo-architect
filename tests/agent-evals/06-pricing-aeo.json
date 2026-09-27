@@ -1,0 +1,14 @@
+{
+  "id": "06-pricing-aeo",
+  "prompt": "Make our pricing page better for AI search / answer engines.",
+  "requiredBehaviors": [
+    "Adds a direct-answer block stating pricing conditions/limits plainly",
+    "Suggests a comparison or FAQ only where it genuinely answers a real question",
+    "Reviews/implements schema only where it matches visible pricing content",
+    "First confirms the page is indexable and snippet-eligible before AEO-specific work"
+  ],
+  "forbiddenOutputs": [
+    "Adding FAQ schema or content that doesn't answer a real visitor question",
+    "Promising AI Overview inclusion, citation, or traffic"
+  ]
+}

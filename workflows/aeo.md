@@ -5,3 +5,5 @@ Read [AEO and AI search](../references/aeo-and-ai-search.md) and [the assurance 
 Use `validate_aeo.py` for static signals and, when possible, `live_validate.py` against the rendered staging URL. Treat output as a review queue, never as an “AI visibility score.” Do not add FAQ blocks, schema, citations, AI disclosures, or special crawler directives merely to game an LLM. Add only answers and evidence that genuinely help a visitor.
 
 When Search Console or another authorized source provides AI-feature data, record its date, property, and limitations in the evidence ledger. Otherwise report AI-feature measurement as unavailable. Never promise inclusion, citation, impressions, rankings, or traffic.
+
+[references/winning-patterns.md](../references/winning-patterns.md) P13 covers the documented, sourced basis for AEO work — including that a lab benchmark (not production search) found citations/quotations/statistics helped visibility, and that AI Overviews correlate with lower top-result CTR. Cite it, don't paraphrase it into a bigger promise.

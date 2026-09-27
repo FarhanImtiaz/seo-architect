@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "categories": {
+    "technical": {"max": 20, "checks": [
+      {"id": "robots-not-blocking-all", "points": 4, "mode": "deterministic", "source": "robots", "formula": "binary"},
+      {"id": "sitemap-valid-absolute", "points": 3, "mode": "deterministic", "source": "sitemap", "formula": "binary"},
+      {"id": "sitemap-covers-routes", "points": 3, "mode": "deterministic", "source": "sitemap+routes", "formula": "ratio"},
+      {"id": "canonical-present-ratio", "points": 4, "mode": "deterministic", "source": "metadata", "formula": "ratio"},
+      {"id": "no-noindex-on-sitemap-routes", "points": 3, "mode": "deterministic", "source": "metadata", "formula": "ratio"},
+      {"id": "no-routes-missing-vs-baseline", "points": 3, "mode": "deterministic", "source": "regression", "formula": "binary"}
+    ]},
+    "ia": {"max": 10, "checks": [
+      {"id": "orphan-ratio", "points": 4, "mode": "deterministic", "source": "links", "formula": "ratio"},
+      {"id": "click-depth-ratio", "points": 4, "mode": "deterministic", "source": "links", "formula": "ratio"},
+      {"id": "breadcrumbs-on-nested-routes", "points": 2, "mode": "deterministic", "source": "jsonld", "formula": "ratio"}
+    ]},
+    "onpage": {"max": 15, "checks": [
+      {"id": "title-present", "points": 4, "mode": "deterministic", "source": "metadata", "formula": "ratio"},
+      {"id": "titles-unique", "points": 3, "mode": "deterministic", "source": "metadata", "formula": "ratio"},
+      {"id": "description-present", "points": 2, "mode": "deterministic", "source": "metadata", "formula": "ratio"},
+      {"id": "descriptions-unique", "points": 2, "mode": "deterministic", "source": "metadata", "formula": "ratio"},
+      {"id": "single-h1", "points": 2, "mode": "deterministic", "source": "metadata", "formula": "ratio"},
+      {"id": "title-length-range", "points": 2, "mode": "deterministic", "source": "metadata", "formula": "ratio"}
+    ]},
+    "content": {"max": 15, "checks": [
+      {"id": "strategy-keywords-not-stub", "points": 3, "mode": "deterministic", "source": "state", "formula": "binary"},
+      {"id": "keyword-targets-resolve", "points": 3, "mode": "deterministic", "source": "state+routes", "formula": "ratio"},
+      {"id": "thin-content-ratio", "points": 3, "mode": "deterministic", "source": "content", "formula": "ratio"},
+      {"id": "no-duplicate-template-text", "points": 3, "mode": "deterministic", "source": "content", "formula": "ratio"},
+      {"id": "no-zero-business-potential-clusters", "points": 3, "mode": "attested", "source": "evidence", "formula": "binary"}
+    ]},
+    "links": {"max": 10, "checks": [
+      {"id": "no-unresolved-internal-links", "points": 4, "mode": "deterministic", "source": "links", "formula": "ratio"},
+      {"id": "no-orphans", "points": 3, "mode": "deterministic", "source": "links", "formula": "ratio"},
+      {"id": "generic-anchor-ratio", "points": 3, "mode": "deterministic", "source": "links", "formula": "ratio"}
+    ]},
+    "schema": {"max": 10, "checks": [
+      {"id": "jsonld-parses", "points": 3, "mode": "deterministic", "source": "jsonld", "formula": "ratio"},
+      {"id": "required-properties-present", "points": 4, "mode": "deterministic", "source": "jsonld", "formula": "ratio"},
+      {"id": "org-or-website-on-home", "points": 1, "mode": "deterministic", "source": "jsonld", "formula": "binary"},
+      {"id": "visible-content-alignment", "points": 2, "mode": "deterministic", "source": "jsonld", "formula": "ratio"}
+    ]},
+    "performance": {"max": 5, "checks": [
+      {"id": "images-have-dimensions", "points": 2, "mode": "deterministic", "source": "images", "formula": "ratio"},
+      {"id": "no-lazy-load-on-first-image", "points": 1, "mode": "deterministic", "source": "images", "formula": "ratio"},
+      {"id": "image-weight-ok", "points": 2, "mode": "deterministic", "source": "images", "formula": "ratio"}
+    ]},
+    "local": {"max": 5, "checks": [
+      {"id": "nap-consistency", "points": 2, "mode": "deterministic", "source": "content", "formula": "ratio"},
+      {"id": "localbusiness-schema-with-address", "points": 2, "mode": "deterministic", "source": "jsonld", "formula": "binary"},
+      {"id": "contact-route-exists", "points": 1, "mode": "deterministic", "source": "routes", "formula": "binary"}
+    ]},
+    "aeo": {"max": 10, "checks": [
+      {"id": "direct-answer-signal", "points": 3, "mode": "deterministic", "source": "aeo", "formula": "ratio"},
+      {"id": "author-or-org-identity", "points": 2, "mode": "deterministic", "source": "aeo", "formula": "ratio"},
+      {"id": "date-signal", "points": 2, "mode": "deterministic", "source": "aeo", "formula": "ratio"},
+      {"id": "schema-visible-alignment", "points": 3, "mode": "attested", "source": "evidence", "formula": "binary"}
+    ]}
+  },
+  "label": "internal prioritization, not a ranking prediction"
+}

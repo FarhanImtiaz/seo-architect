@@ -1,0 +1,65 @@
+{
+  "routes": [
+    "/",
+    "/hub",
+    "/orphan",
+    "/deep",
+    "/hub/leaf",
+    "/deep/level2",
+    "/deep/level2/level3",
+    "/deep/level2/level3/level4"
+  ],
+  "inboundContextual": {
+    "/": 0,
+    "/hub": 1,
+    "/orphan": 0,
+    "/deep": 1,
+    "/hub/leaf": 1,
+    "/deep/level2": 1,
+    "/deep/level2/level3": 1,
+    "/deep/level2/level3/level4": 1
+  },
+  "inboundGlobal": {
+    "/": 0,
+    "/hub": 0,
+    "/orphan": 0,
+    "/deep": 0,
+    "/hub/leaf": 0,
+    "/deep/level2": 0,
+    "/deep/level2/level3": 0,
+    "/deep/level2/level3/level4": 0
+  },
+  "orphans": [
+    "/orphan"
+  ],
+  "depth": {
+    "/": 0,
+    "/hub": 1,
+    "/orphan": null,
+    "/deep": 1,
+    "/hub/leaf": 2,
+    "/deep/level2": 2,
+    "/deep/level2/level3": 3,
+    "/deep/level2/level3/level4": 4
+  },
+  "anchorsByTarget": {
+    "/hub": [
+      "click here"
+    ],
+    "/deep": [
+      "deep tour"
+    ],
+    "/hub/leaf": [
+      "leaf page details"
+    ],
+    "/deep/level2": [
+      "level two"
+    ],
+    "/deep/level2/level3": [
+      "level three"
+    ],
+    "/deep/level2/level3/level4": [
+      "level four"
+    ]
+  }
+}

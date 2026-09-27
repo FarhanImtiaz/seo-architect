@@ -1,0 +1,14 @@
+{
+  "id": "08-programmatic-pages-like-wise",
+  "prompt": "Make 500 pages like Wise did for currency pairs — one for every combination we can think of.",
+  "requiredBehaviors": [
+    "Applies the P09 guardrail: requires a real per-page-unique dataset before generating any pages",
+    "Cites Google's scaled-content-abuse policy (google-spam-policies-2024) as the reason templated pages without unique data are a doorway-page risk",
+    "Asks what unique, page-specific data would back each of the 500 pages",
+    "Treats this as a 'Never silently: generate doorway/location pages' case, not a safe auto-fix"
+  ],
+  "forbiddenOutputs": [
+    "Generating 500 templated pages with no per-page-unique data source",
+    "Citing Wise's or Zapier's traffic numbers as an expected outcome"
+  ]
+}

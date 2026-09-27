@@ -7,12 +7,14 @@ def source(root):
  return [p for p in root.rglob('*') if p.is_file() and p.suffix in {'.js','.jsx','.ts','.tsx','.vue','.svelte','.astro','.html'} and not any(x in SKIP for x in p.parts)]
 def main():
  root=Path(sys.argv[1] if len(sys.argv)>1 else '.').resolve(); fs=source(root); findings=[]; observed=[]
- next_pages=[p for p in fs if re.search(r'(^|/)(app/(?:.*/)?page|pages/)',str(p.relative_to(root)))]
+ is_nuxt=(root/'nuxt.config.ts').exists() or (root/'nuxt.config.js').exists()
+ next_pages=[] if is_nuxt else [p for p in fs if re.search(r'(^|/)(app/(?:.*/)?page|pages/)',str(p.relative_to(root)))]
  if next_pages:
   observed.append({'adapter':'nextjs','pages':[str(p.relative_to(root)) for p in next_pages]})
   for p in next_pages:
    text=p.read_text(errors='ignore'); path=str(p.relative_to(root))
-   if not (re.search(r'export\s+const\s+metadata\s*=',text) or '<title',text): findings.append({'severity':'MEDIUM','adapter':'nextjs','file':path,'issue':'No static Next metadata export or HTML title.'})
+   if re.search(r'export\s+(?:async\s+)?function\s+generateMetadata\b',text): findings.append({'severity':'INFO','adapter':'nextjs','file':path,'issue':'Dynamic metadata (generateMetadata); verify rendered output.'})
+   elif not (re.search(r'export\s+const\s+metadata\s*=',text) or '<title' in text.lower()): findings.append({'severity':'MEDIUM','adapter':'nextjs','file':path,'issue':'No static Next metadata export or HTML title.'})
    if 'metadataBase' not in text and 'canonical' not in text and ('app/' in path): findings.append({'severity':'LOW','adapter':'nextjs','file':path,'issue':'No static metadataBase/canonical evidence in this route; may be inherited.'})
   for name in ('sitemap.ts','sitemap.js','robots.ts','robots.js'):
    if (root/'app'/name).exists(): observed.append({'adapter':'nextjs','generatedAsset':f'app/{name}'})
@@ -22,8 +24,8 @@ def main():
   for p in astro:
    text=p.read_text(errors='ignore')
    if '<head' not in text.lower() and 'BaseHead' not in text: findings.append({'severity':'LOW','adapter':'astro','file':str(p.relative_to(root)),'issue':'No static Astro head evidence; may be inherited.'})
- nuxt=[p for p in fs if '/pages/' in ('/'+str(p.relative_to(root)))]
- if (root/'nuxt.config.ts').exists() or (root/'nuxt.config.js').exists():
+ nuxt=[p for p in fs if '/pages/' in ('/'+str(p.relative_to(root)))] if is_nuxt else []
+ if is_nuxt:
   observed.append({'adapter':'nuxt','pages':[str(p.relative_to(root)) for p in nuxt]})
   for p in nuxt:
    if 'useHead(' not in p.read_text(errors='ignore') and 'definePageMeta(' not in p.read_text(errors='ignore'): findings.append({'severity':'LOW','adapter':'nuxt','file':str(p.relative_to(root)),'issue':'No static Nuxt head evidence; may be inherited.'})

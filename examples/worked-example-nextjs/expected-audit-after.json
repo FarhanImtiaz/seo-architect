@@ -1,0 +1,18 @@
+{
+  "_label": "Golden summary for after/. See expected-audit.json for regeneration notes.",
+  "highOrCriticalCount": 0,
+  "highOrCritical": [],
+  "score": 73.2,
+  "coveragePct": 71.0,
+  "categories": {
+    "technical": {"status": "evidenced", "earned": 4.0},
+    "ia": {"status": "evidenced", "earned": 8.0},
+    "onpage": {"status": "evidenced", "earned": 13.0},
+    "content": {"status": "evidenced", "earned": 3.0},
+    "links": {"status": "evidenced", "earned": 10.0},
+    "schema": {"status": "evidenced", "earned": 9.0},
+    "performance": {"status": "evidenced", "earned": 5.0},
+    "local": {"status": "unavailable"},
+    "aeo": {"status": "evidenced", "earned": 0.0}
+  }
+}

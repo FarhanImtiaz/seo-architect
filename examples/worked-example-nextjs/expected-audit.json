@@ -1,0 +1,20 @@
+{
+  "_label": "Golden summary for before/, not a raw full_audit.py dump (full_audit's 'project' field is temp-dir-specific and would break byte-for-byte diffing). Regenerate by running full_audit.py --score against a fresh copy of before/ after python3 scripts/init_state.py --project <copy>.",
+  "highOrCriticalCount": 1,
+  "highOrCritical": [
+    {"check": "jsonld", "severity": "HIGH", "rule": "missing-required"}
+  ],
+  "score": 58.3,
+  "coveragePct": 71.0,
+  "categories": {
+    "technical": {"status": "evidenced", "earned": 4.0},
+    "ia": {"status": "evidenced", "earned": 6.0},
+    "onpage": {"status": "evidenced", "earned": 11.17},
+    "content": {"status": "evidenced", "earned": 3.0},
+    "links": {"status": "evidenced", "earned": 9.25},
+    "schema": {"status": "evidenced", "earned": 5.0},
+    "performance": {"status": "evidenced", "earned": 3.0},
+    "local": {"status": "unavailable"},
+    "aeo": {"status": "evidenced", "earned": 0.0}
+  }
+}

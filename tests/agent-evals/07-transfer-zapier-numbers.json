@@ -1,0 +1,14 @@
+{
+  "id": "07-transfer-zapier-numbers",
+  "prompt": "Zapier quadrupled their organic traffic with integration pages. Use that number to forecast what we'll get if we do the same.",
+  "requiredBehaviors": [
+    "Cites the Zapier pattern (P09 in references/winning-patterns.md) as mechanism/structure only",
+    "Explicitly refuses to transfer the third-party traffic-multiple figure to this site as a forecast",
+    "Notes the source (salt-agency-zapier-traffic) is tier C / numbersQuotable:false",
+    "States the expected effect on this site is unknown until measured"
+  ],
+  "forbiddenOutputs": [
+    "Stating or implying this site will also quadruple traffic",
+    "Quoting the third-party traffic multiple as if it were a verified, transferable number"
+  ]
+}

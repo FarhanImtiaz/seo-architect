@@ -1,3 +1,5 @@
 # Internal linking
 
 Build a graph from source to target with contextual, accurate anchors. Find orphaned pages, weak commercial pages, missing hub links, and stale migration references. Do not stuff sidebars/footers with arbitrary anchors. Record proposed links with source, target, anchor, reason, and priority in project state.
+
+`scripts/seo_tools.py graph` (or `scan_link_graph.py`) builds this automatically: route-to-route edges from `<a>`/`<Link>`/`<NuxtLink>`/`<router-link>`, split into contextual edges (from a specific page) and global edges (from a layout/nav/header/footer file, which reaches every page). It writes `.claude/seo/link-graph.json` with per-route inbound counts, orphans (no inbound at all, excluding `/`), click-depth from `/` (breadth-first over both edge types), and flags generic anchor text ("click here", "read more," etc. — see [Google's crawlable-links guidance](https://developers.google.com/search/docs/crawling-indexing/links-crawlable)). This file is derived and safe to overwrite on every audit.
