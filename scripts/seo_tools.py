@@ -9,8 +9,14 @@ import xml.etree.ElementTree as ET
 
 SKIP={'.git','node_modules','.next','dist','build','vendor','.venv','__pycache__'}
 TEXT={'.html','.htm','.jsx','.tsx','.js','.ts','.vue','.svelte','.astro','.mdx'}
+import os as _os
+MAX_FILES=int(_os.environ.get('SEO_ARCHITECT_MAX_FILES','0')) or None  # 0/unset = unlimited
 def files(root, suffixes=TEXT):
-    return [p for p in root.rglob('*') if p.is_file() and p.suffix.lower() in suffixes and not any(x in SKIP for x in p.parts)]
+    out=[]
+    for p in root.rglob('*'):
+        if MAX_FILES and len(out)>=MAX_FILES: break
+        if p.is_file() and p.suffix.lower() in suffixes and not any(x in SKIP for x in p.parts): out.append(p)
+    return out
 def emit(kind, items, notes=None):
     notes=notes or []
     print(json.dumps({'tool':kind,'findings':items,'notes':notes},indent=2)); return 1 if any(x.get('severity') in ('CRITICAL','HIGH') for x in items) else 0

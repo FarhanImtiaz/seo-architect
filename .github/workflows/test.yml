@@ -1,0 +1,24 @@
+name: Test seo-architect
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python3 tests/run_tests.py
+      - run: python3 scripts/validate_claude_skill.py .
+      - run: python3 scripts/validate_sources.py .
+      # Not run in CI: tests/run_agent_evals.py -- it launches real `claude -p` sessions, which
+      # need an API key/auth this workflow does not (and should not) have. Run it locally instead.

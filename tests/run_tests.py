@@ -2,7 +2,7 @@
 import json, subprocess, sys, tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-ROOT=Path(__file__).resolve().parents[1]; TOOLS=ROOT/'scripts/seo_tools.py'; INIT=ROOT/'scripts/init_state.py'; FIX=ROOT/'tests/fixtures/site'; HOOK=ROOT/'scripts/guardian_hook.py'; LEDGER=ROOT/'scripts/evidence_ledger.py'; CONTRACT=ROOT/'scripts/validate_page_contract.py'; FRAMEWORK=ROOT/'scripts/framework_inspect.py'; ADAPTERS=ROOT/'scripts/framework_adapters.py'; AEO=ROOT/'scripts/validate_aeo.py'; FULL=ROOT/'scripts/full_audit.py'; CLAUDE=ROOT/'scripts/validate_claude_skill.py'; SCORE=ROOT/'scripts/score.py'; VALSRC=ROOT/'scripts/validate_sources.py'; PATTERNMATCH=ROOT/'scripts/pattern_match.py'; LINKGRAPH=ROOT/'scripts/scan_link_graph.py'; IMAGES=ROOT/'scripts/scan_images.py'; METAEXTRACT=ROOT/'scripts/metadata_extract.py'; HREFLANG=ROOT/'scripts/validate_hreflang.py'; LIVEDATA=ROOT/'scripts/live_data.py'; CI=ROOT/'scripts/ci_check.py'; REDIRECTS=ROOT/'scripts/scan_redirects.py'; CANONICALS=ROOT/'scripts/scan_canonicals.py'; FRESHNESS=ROOT/'scripts/scan_freshness.py'; RENDERDIFF=ROOT/'scripts/render_diff.py'; SCANLOGS=ROOT/'scripts/scan_logs.py'; PLATFORMS=ROOT/'scripts/platform_detect.py'; PLATFORMFIX=ROOT/'tests/fixtures/platforms'; AIACCESS=ROOT/'scripts/validate_ai_access.py'; COMPETITOR=ROOT/'scripts/competitor_diff.py'
+ROOT=Path(__file__).resolve().parents[1]; TOOLS=ROOT/'scripts/seo_tools.py'; INIT=ROOT/'scripts/init_state.py'; FIX=ROOT/'tests/fixtures/site'; HOOK=ROOT/'scripts/guardian_hook.py'; LEDGER=ROOT/'scripts/evidence_ledger.py'; CONTRACT=ROOT/'scripts/validate_page_contract.py'; FRAMEWORK=ROOT/'scripts/framework_inspect.py'; ADAPTERS=ROOT/'scripts/framework_adapters.py'; AEO=ROOT/'scripts/validate_aeo.py'; FULL=ROOT/'scripts/full_audit.py'; CLAUDE=ROOT/'scripts/validate_claude_skill.py'; SCORE=ROOT/'scripts/score.py'; VALSRC=ROOT/'scripts/validate_sources.py'; PATTERNMATCH=ROOT/'scripts/pattern_match.py'; LINKGRAPH=ROOT/'scripts/scan_link_graph.py'; IMAGES=ROOT/'scripts/scan_images.py'; METAEXTRACT=ROOT/'scripts/metadata_extract.py'; HREFLANG=ROOT/'scripts/validate_hreflang.py'; LIVEDATA=ROOT/'scripts/live_data.py'; CI=ROOT/'scripts/ci_check.py'; REDIRECTS=ROOT/'scripts/scan_redirects.py'; CANONICALS=ROOT/'scripts/scan_canonicals.py'; FRESHNESS=ROOT/'scripts/scan_freshness.py'; RENDERDIFF=ROOT/'scripts/render_diff.py'; SCANLOGS=ROOT/'scripts/scan_logs.py'; PLATFORMS=ROOT/'scripts/platform_detect.py'; PLATFORMFIX=ROOT/'tests/fixtures/platforms'; AIACCESS=ROOT/'scripts/validate_ai_access.py'; COMPETITOR=ROOT/'scripts/competitor_diff.py'; BUILDDIST=ROOT/'scripts/build_dist.py'
 def run(*args, ok=(0,)):
  p=subprocess.run([sys.executable,*map(str,args)],capture_output=True,text=True)
  if p.returncode not in ok: raise AssertionError(f'{args}: {p.returncode}\n{p.stdout}\n{p.stderr}')
@@ -857,6 +857,34 @@ def live_data_import_ai_referrals_filters_to_known_ai_hosts_and_flags_undercount
   assert out['rowsImported']==2 and out['rowsInSource']==3, out
   written=json.loads(Path(out['wrote']).read_text())
   assert 'UNDERCOUNTS' in written['limits']
+
+@test
+def build_dist_produces_a_valid_plugin_layout_without_duplicating_plugin_files():
+ with tempfile.TemporaryDirectory() as td:
+  out=Path(td)/'dist'
+  run(BUILDDIST,out,ok=(0,))
+  plugin=json.loads((out/'.claude-plugin/plugin.json').read_text())
+  hooks=json.loads((out/'hooks/hooks.json').read_text())
+  assert plugin['name']=='seo-architect'
+  assert 'CLAUDE_PLUGIN_ROOT' in hooks['PreToolUse'][0]['hooks'][0]['command']
+  assert (out/'skills/seo-architect/SKILL.md').exists()
+  assert (out/'skills/seo-architect/scripts/guardian_hook.py').exists()
+  assert not (out/'skills/seo-architect/.claude-plugin').exists(), 'plugin.json must not be duplicated inside skills/seo-architect'
+  assert not (out/'skills/seo-architect/hooks').exists(), 'hooks.json must not be duplicated inside skills/seo-architect'
+
+@test
+def seo_tools_max_files_env_cap_bounds_scan_time_on_a_large_tree():
+ import os,time
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td)
+  for i in range(5000):
+   d=p/f'app/page{i}'; d.mkdir(parents=True); (d/'page.html').write_text(f'<html><title>P{i}</title></html>')
+  env=dict(os.environ); env['SEO_ARCHITECT_MAX_FILES']='200'
+  t0=time.time()
+  r=subprocess.run([sys.executable,str(TOOLS),'metadata',str(p)],capture_output=True,text=True,env=env)
+  elapsed=time.time()-t0
+  assert r.returncode in (0,1), r.stderr
+  assert elapsed<30, f'a 5000-file tree with SEO_ARCHITECT_MAX_FILES=200 took {elapsed:.1f}s -- the cap is not bounding scan time'
 
 def main():
  failures=[]

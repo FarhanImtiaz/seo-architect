@@ -53,6 +53,7 @@ Read the named workflow before acting. Natural-language equivalents use the same
 | `playbook`, "what's working for others" | [workflows/playbook.md](workflows/playbook.md) |
 | `measure`, "did it work", "impact" | [workflows/measure.md](workflows/measure.md) |
 | `ci`, "set up CI", "PR check" | [workflows/ci.md](workflows/ci.md) |
+| `verify-sources`, "check pending sources" | [workflows/verify-sources.md](workflows/verify-sources.md) |
 | general implementation | [workflows/optimize.md](workflows/optimize.md) |
 
 Commands may share a workflow: `technical` is a technical audit; `fix` fixes only evidenced, approved-safe findings; `page` means `new-page`; `links` means `internal-links`.

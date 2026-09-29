@@ -1,0 +1,14 @@
+{
+  "PreToolUse": [
+    {
+      "matcher": "Write|Edit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/skills/seo-architect/scripts/guardian_hook.py\" 2>/dev/null || true",
+          "timeout": 5
+        }
+      ]
+    }
+  ]
+}

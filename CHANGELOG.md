@@ -69,6 +69,18 @@ you bump the rubric, add a dated entry below that states the new rubric version 
   2 seconds. Output is always framed as "structural differences", never "why they rank" -- this
   tool has no ranking data and must never imply it does. `aiAccess` is registered in
   `full_audit.py`'s `TOOLS`; `competitor_diff.py` is a standalone tool (needs explicit URLs).
+- Distribution, performance, ongoing verification: `.claude-plugin/plugin.json` + `hooks/hooks.json`
+  (using `${CLAUDE_PLUGIN_ROOT}`, the reliably-expanded plugin-root variable — see the Phase-1
+  fix history below for why `${CLAUDE_SKILL_DIR}` was never safe to rely on) + `scripts/build_dist.py`,
+  which assembles a plugin-shaped distribution (`skills/seo-architect/...`) from this repo's
+  standalone-skill layout without duplicating or forking the source of truth; the standalone
+  install path in `INSTALL.md` is unaffected. `.github/workflows/test.yml` runs the suite and
+  both validators across Python 3.9-3.13 (agent-evals need real `claude -p` auth and are
+  deliberately not run in CI). `scripts/seo_tools.py`'s `files()` now honors a
+  `SEO_ARCHITECT_MAX_FILES` environment variable to bound scan time on very large trees (default:
+  unlimited, unchanged behavior). New `workflows/verify-sources.md` (the process for clearing a
+  `lastVerified:"pending"` source) and `references/security.md` (the credential/network/SSRF/
+  IP-truncation rules this skill follows, collected in one place).
 
 ### Fixed
 - `scripts/impact.py`: an independent adversarial QA pass found the evaluation pipeline could be
