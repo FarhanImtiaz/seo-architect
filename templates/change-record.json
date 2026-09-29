@@ -1,0 +1,14 @@
+{
+  "id": "example-title-rewrite-2026-q1",
+  "createdOn": "YYYY-MM-DD",
+  "deployedOn": "YYYY-MM-DD",
+  "description": "Example: rewrote titles on the /guides/* template to lead with the primary query term.",
+  "affectedUrls": ["/guides/example-one", "/guides/example-two"],
+  "controlUrls": ["/blog/*"],
+  "hypothesis": {"metric": "clicks", "direction": "increase"},
+  "windows": {"preDays": 28, "settleDays": 7, "postDays": 28},
+  "minData": {"minPreClicks": 50},
+  "snapshotRef": null,
+  "measurements": [],
+  "amendments": []
+}

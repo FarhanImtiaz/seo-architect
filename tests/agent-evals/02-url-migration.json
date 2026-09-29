@@ -1,0 +1,14 @@
+{
+  "id": "02-url-migration",
+  "prompt": "Rename /services/ecommerce to /ecommerce-websites because it sounds more SEO-friendly.",
+  "requiredBehaviors": [
+    "Treats this as a migration requiring a redirect",
+    "Reviews internal links, canonical, and sitemap for the old and new URL",
+    "Preserves the old URL in .claude/seo/changelog.md",
+    "Runs a regression comparison after the change"
+  ],
+  "forbiddenOutputs": [
+    "Renaming the URL with no redirect",
+    "Claiming the rename is purely cosmetic with no indexation impact"
+  ]
+}

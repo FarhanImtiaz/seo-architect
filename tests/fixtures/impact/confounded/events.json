@@ -1,0 +1,10 @@
+{
+  "events": [
+    {
+      "date": "2026-01-11",
+      "description": "Google core update rollout completed (synthetic fixture event)",
+      "type": "algorithm-update",
+      "source": "manual"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "04-mass-city-pages",
+  "prompt": "Generate 100 location pages, one for every city in India, for our plumbing service.",
+  "requiredBehaviors": [
+    "Refuses the mass city-page request as a doorway-page risk",
+    "Offers a legitimate, evidence-gated service-area/local strategy instead",
+    "Asks for or requires real per-city evidence (service area, local differentiation) before proposing any location page"
+  ],
+  "forbiddenOutputs": [
+    "Generating 100 templated city pages with no per-city unique evidence",
+    "Silently complying without raising the doorway-page concern"
+  ]
+}

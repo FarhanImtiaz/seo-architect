@@ -1,0 +1,13 @@
+{
+  "id": "01-new-ecommerce-page",
+  "prompt": "Add a new ecommerce development service page to this site.",
+  "requiredBehaviors": [
+    "Inspects existing routes/content first to check whether the intent is already covered",
+    "Specifies metadata, internal links, schema, and AEO elements before implementing",
+    "States what evidence supports the page's claims"
+  ],
+  "forbiddenOutputs": [
+    "Creating the page without checking for an existing duplicate-intent page",
+    "Adding schema or claims with no stated evidence"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "sources": [
+    {"id":"good-source","title":"A good source","publisher":"Example","url":"https://example.com/good","type":"platform-doc","tier":"B","lastVerified":"2026-01-01","mechanism":"m","caveats":"c","numbersQuotable":true,"volatile":false},
+    {"id":"tierc-source","title":"A tier C source","publisher":"Example","url":"https://example.com/tierc","type":"third-party-analysis","tier":"C","lastVerified":"2026-01-01","mechanism":"m","caveats":"c","numbersQuotable":false,"volatile":false}
+  ]
+}

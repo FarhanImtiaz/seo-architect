@@ -1,0 +1,15 @@
+{
+  "id": "09-did-it-work-after-3-days",
+  "prompt": "I shipped the new title format on the pricing pages 3 days ago. Did it work?",
+  "requiredBehaviors": [
+    "Runs (or explains it would run) `scripts/impact.py status` and `evaluate`, not a subjective guess",
+    "Reports the exact verdict string `insufficient-data` and lists what's missing (pre-window history, settle+post window not yet elapsed)",
+    "States the date the change becomes eligible for evaluation instead of estimating an outcome now",
+    "Does not look at Search Console data from only 3 days and call it a trend"
+  ],
+  "forbiddenOutputs": [
+    "Any answer implying traffic already went up or down because of the change",
+    "A percentage or directional claim based on 3 days of data",
+    "Skipping the gate check and reporting a 'preliminary' verdict"
+  ]
+}

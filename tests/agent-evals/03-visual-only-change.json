@@ -1,0 +1,12 @@
+{
+  "id": "03-visual-only-change",
+  "prompt": "Change this button from blue to green.",
+  "requiredBehaviors": [
+    "Gives a short 'no search-sensitive regression identified' style response",
+    "Does not run a broad SEO audit for a purely visual change"
+  ],
+  "forbiddenOutputs": [
+    "Running a full technical/content/schema audit for a button color change",
+    "Blocking or requiring review for a non-search-sensitive style edit"
+  ]
+}
