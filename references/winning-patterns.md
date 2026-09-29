@@ -53,7 +53,7 @@ Each card: `Pattern` (one line) → `Documented evidence` (source IDs) → `Mech
 **Documented evidence:** hubspot-topic-clusters
 **Mechanism:** A pillar page covering a broad topic, linked bidirectionally to narrower cluster pages, each cluster page owning one URL.
 **Applies when:** `keywords.md` groups queries into clusters, or a content area has 5+ related pages with no hub.
-**Verify here:** `.claude/seo/keywords.md` maps each cluster to one target URL; link graph (Phase 4) shows pillar↔cluster links both directions.
+**Verify here:** `.claude/seo/keywords.md` maps each cluster to one target URL; link graph shows pillar↔cluster links both directions.
 **Skill action:** In `new-page.md`/`content-plan.md`, propose the pillar/cluster structure before creating a new standalone page in an existing topic area.
 **Do not claim:** A specific ranking outcome from restructuring into clusters.
 
@@ -80,7 +80,7 @@ Each card: `Pattern` (one line) → `Documented evidence` (source IDs) → `Mech
 **Documented evidence:** hubspot-historical-optimization
 **Mechanism:** HubSpot found most blog views/leads came from older posts, so they update those posts for accuracy/completeness rather than letting them go stale, keeping the URL stable.
 **Applies when:** Analytics/Search Console data (or evidence-ledger entries) identify existing pages with traffic but stale content.
-**Verify here:** Requires authorized measurement data (Phase 7 live-data adapters) or an evidence-ledger entry; otherwise this is a hypothesis, not an observed fact.
+**Verify here:** Requires authorized measurement data (opt-in live-data adapters) or an evidence-ledger entry; otherwise this is a hypothesis, not an observed fact.
 **Skill action:** Propose a refresh candidate list in `content-plan.md`; update `dateModified` only when content substantively changes, never cosmetically.
 **Do not claim:** That refreshing guarantees renewed traffic.
 
@@ -88,7 +88,7 @@ Each card: `Pattern` (one line) → `Documented evidence` (source IDs) → `Mech
 
 **Documented evidence:** searchpilot-nearby-location-links, searchpilot-increasing-internal-linking, searchpilot-internal-linking-tag, google-crawlable-links-docs
 **Mechanism:** SearchPilot's split tests added contextual links (to nearby location pages; to lower-level category pages) and measured organic-traffic impact; both used real `<a href>` elements with descriptive anchors, per Google's own crawlable-links guidance.
-**Applies when:** The link graph (Phase 4) finds an under-linked commercially important page.
+**Applies when:** The link graph finds an under-linked commercially important page.
 **Verify here:** `.claude/seo/link-graph.json` inbound-link counts.
 **Skill action:** Propose specific source→target→anchor additions in `internal-links.md`; avoid sidebar/footer link-stuffing (see [references/internal-linking.md](internal-linking.md)).
 **Do not claim:** A specific traffic lift from adding links on this site.
@@ -98,7 +98,7 @@ Each card: `Pattern` (one line) → `Documented evidence` (source IDs) → `Mech
 **Documented evidence:** salt-agency-zapier-traffic, omnius-wise-case-study, google-spam-policies-2024
 **Mechanism:** Observable structure (not verified traffic outcomes): Zapier's app/app-pair integration pages and Wise's currency-pair pages each carry real, per-page-unique data (a specific integration's setup steps; a live exchange rate) rather than templated filler.
 **Applies when:** A request proposes generating many similar pages from a template (locations, integrations, comparisons, currency/unit pairs).
-**Verify here:** Does the project have a real per-page dataset with distinct values? At Phase 5, the `--built-dir` uniqueness check on rendered output.
+**Verify here:** Does the project have a real per-page dataset with distinct values? The `--built-dir` uniqueness check on rendered output.
 **Skill action:** Require a concrete uniqueness source before proposing template-generated pages; this directly enforces the existing "Never silently: generate doorway/location pages" rule and Google's scaled-content-abuse policy (google-spam-policies-2024).
 **Do not claim:** Any of the third-party traffic estimates for Zapier/Wise — they're tier C and `numbersQuotable:false`. Cite structure only.
 
@@ -115,8 +115,8 @@ Each card: `Pattern` (one line) → `Documented evidence` (source IDs) → `Mech
 
 **Documented evidence:** webdev-vodafone-case-study, webdev-yahoo-japan-case-study, webdev-economic-times-case-study, webdev-vitals-business-impact
 **Mechanism:** Vodafone's controlled A/B test moved a widget's rendering server-side, measuring better LCP and a documented sales increase. Yahoo! JAPAN News fixed layout shift (CLS) by reserving image space before load.
-**Applies when:** Images are missing dimensions, or a page has late-loading above-the-fold content (Phase 4 image scan).
-**Verify here:** `seo_tools.py images` findings (Phase 4).
+**Applies when:** Images are missing dimensions, or a page has late-loading above-the-fold content (image scan).
+**Verify here:** `seo_tools.py images` findings.
 **Skill action:** Fix missing width/height and defer non-critical lazy-loading, framed as user-experience/conversion work.
 **Do not claim:** A ranking improvement — the documented outcomes are engagement/conversion, not search position.
 
@@ -151,7 +151,7 @@ Each card: `Pattern` (one line) → `Documented evidence` (source IDs) → `Mech
 
 **Documented evidence:** google-hreflang-docs
 **Mechanism:** Reciprocal `hreflang` links across all localized variants, a self-reference on every page, and an `x-default` fallback.
-**Applies when:** i18n is detected or `config.json` lists secondary markets (Phase 5 `hreflang` subcommand).
+**Applies when:** i18n is detected or `config.json` lists secondary markets (`validate_hreflang.py`).
 **Verify here:** `validate_hreflang.py` findings.
 **Skill action:** Fix missing self-reference/reciprocal links/x-default before other localization work.
 **Do not claim:** A ranking benefit in any specific market from correct hreflang — it's a correctness requirement, not a ranking lever.

@@ -62,6 +62,24 @@ def binary_check(id_,points,mode,applicable,passed):
     if not applicable: return {'id':id_,'points':points,'mode':mode,'applicable':False,'earned':None,'ratio':None}
     return {'id':id_,'points':points,'mode':mode,'applicable':True,'earned':points if passed else 0.0,'ratio':1.0 if passed else 0.0}
 
+UNAVAILABLE_REASONS={
+    'robots-not-blocking-all':('No robots.txt found in the project.','Add a robots.txt file, then re-run the audit.'),
+    'sitemap-valid-absolute':('No sitemap XML found in the project.','Add a sitemap*.xml file, then re-run the audit.'),
+    'sitemap-covers-routes':('No sitemap XML found in the project.','Add a sitemap*.xml file, then re-run the audit.'),
+    'no-routes-missing-vs-baseline':('No regression baseline exists yet.','Run `seo_tools.py snapshot .` once, then re-run the audit after future changes.'),
+    'orphan-ratio':('No link graph has been built yet.','Run `seo_tools.py graph .` (or `full_audit.py`, which calls it) to build .claude/seo/link-graph.json.'),
+    'click-depth-ratio':('No link graph has been built yet.','Run `seo_tools.py graph .` to build .claude/seo/link-graph.json.'),
+    'keyword-targets-resolve':('.claude/seo/keywords.md has no "Target URL" column with rows yet.','Fill in keywords.md with target URLs, then re-run the audit.'),
+    'no-unresolved-internal-links':('No root-relative internal links were found to check.','Add internal navigation links, then re-run the audit.'),
+    'no-orphans':('No link graph has been built yet.','Run `seo_tools.py graph .` to build .claude/seo/link-graph.json.'),
+    'generic-anchor-ratio':('No internal link anchors were found via the link graph.','Run `seo_tools.py graph .`, then re-run the audit.'),
+    'jsonld-parses':('No JSON-LD structured data was found.','Add JSON-LD structured data where it visibly applies, then re-run the audit.'),
+    'required-properties-present':('No typed JSON-LD (with an @type) was found.','Add JSON-LD structured data where it visibly applies, then re-run the audit.'),
+    'org-or-website-on-home':('No home-page file was identified.','Confirm the project has a discoverable home route, then re-run the audit.'),
+    'visible-content-alignment':('No typed JSON-LD (with an @type) was found.','Add JSON-LD structured data where it visibly applies, then re-run the audit.'),
+    'no-zero-business-potential-clusters':('No matching evidence-ledger entry was attested via --attest.','Add an evidence-ledger entry for this claim and pass --attest no-zero-business-potential-clusters=<index>.'),
+    'schema-visible-alignment':('No matching evidence-ledger entry was attested via --attest.','Add an evidence-ledger entry for this claim and pass --attest schema-visible-alignment=<index>.'),
+}
 def unavailable(id_,points,mode): return {'id':id_,'points':points,'mode':mode,'applicable':False,'earned':None,'ratio':None}
 
 def attested_check(id_,points,mode,attest,root):
@@ -219,12 +237,17 @@ def score_performance(audit,root):
             return [{'id':'field-data-core-web-vitals','points':5,'mode':'ratio','applicable':True,'earned':round(5*ratio,2),'ratio':round(ratio,3),'source':'CrUX field data (overrides static image proxies per references/scoring-rubric.md)'}]
     img=result_of(audit,'images')
     if not img: return [unavailable('images-have-dimensions',2,'ratio'),unavailable('no-lazy-load-on-first-image',1,'ratio'),unavailable('image-weight-ok',2,'ratio')]
-    findings=img.get('findings',[]); total=img.get('totalImages',0) or 1
+    findings=img.get('findings',[])
+    # M1 fix: a site with zero images must be reported as unavailable (no evidence), never as a
+    # perfect 5/5 -- `total=... or 1` previously forced a fake denominator of 1 with 0 findings,
+    # which ratio_check() then scored as a flawless 1.0 ratio. Passing the real total (0 when
+    # there are no images) lets ratio_check()'s own total==0 guard mark it unavailable instead.
+    total=img.get('totalImages',0)
     dims=sum(1 for f in findings if f.get('rule')=='missing-dimensions')
     lazy=sum(1 for f in findings if f.get('rule')=='lazy-first-image')
     weight=sum(1 for f in findings if f.get('rule')=='oversized')
     return [ratio_check('images-have-dimensions',2,'ratio',max(total-dims,0),total),
-            ratio_check('no-lazy-load-on-first-image',1,'ratio',max(total-lazy,0) if lazy<=total else 0,max(total,1)),
+            ratio_check('no-lazy-load-on-first-image',1,'ratio',max(total-lazy,0) if lazy<=total else 0,total),
             ratio_check('image-weight-ok',2,'ratio',max(total-weight,0),total)]
 
 PHONE=re.compile(r'\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b')
@@ -268,10 +291,15 @@ def compute(root,audit,attest):
         'aeo':score_aeo(audit,attest,root),
     }
     out={'rubricVersion':RUBRIC['version'],'rubricHash':RUBRIC_HASH,'categories':{},'label':RUBRIC['label']}
-    total_earned=0.0; total_applicable_max=0.0; total_declared_max=0.0
+    total_earned=0.0; total_applicable_max=0.0; total_declared_max=0.0; unavailable_checks=[]
     for name,checks in categories.items():
         declared_max=RUBRIC['categories'][name]['max']; total_declared_max+=declared_max
         if checks is None: out['categories'][name]={'status':'unavailable','declaredMax':declared_max}; continue
+        for c in checks:
+            c['evidenceMix']=_evidence_mix(c)
+            if not c['applicable']:
+                reason,how=UNAVAILABLE_REASONS.get(c['id'],(f'No evidence was available for check "{c["id"]}" in this audit run.',f'Re-run the audit after adding the relevant source (see references/scoring-rubric.md, check "{c["id"]}").'))
+                unavailable_checks.append({'id':c['id'],'category':name,'reason':reason,'howToUnlock':how})
         applicable=[c for c in checks if c['applicable']]
         if not applicable: out['categories'][name]={'status':'unavailable','declaredMax':declared_max,'checks':checks}; continue
         earned=sum(c['earned'] for c in applicable); applicable_max=sum(c['points'] for c in applicable)
@@ -280,7 +308,14 @@ def compute(root,audit,attest):
     out['score']=round(100*total_earned/total_applicable_max,1) if total_applicable_max else None
     out['evidencedMax']=round(total_applicable_max,2)
     out['coveragePct']=round(100*total_applicable_max/total_declared_max,1) if total_declared_max else 0.0
+    out['unavailableChecks']=unavailable_checks
     return out
+
+def _evidence_mix(check):
+    if check.get('mode')=='attested': return 'attested'
+    src=str(check.get('source') or '')
+    if 'CrUX' in src or 'field data' in src.lower(): return 'field-data'
+    return 'source-static'
 
 def append_history(root,out):
     hist=root/'.claude/seo/audit-history.json'

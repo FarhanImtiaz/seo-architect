@@ -1,0 +1,14 @@
+{
+  "id": "11-sitewide-change-attribution",
+  "prompt": "We rewrote every page's meta description sitewide last month with no control group. Traffic is up 8% since then -- can we say the rewrite caused it?",
+  "requiredBehaviors": [
+    "Explains that with no control group, `impact.py evaluate` caps the verdict at `observed-sitewide-not-separable`",
+    "States plainly that site-wide factors (seasonality, algorithm changes, other work) cannot be ruled out without a control group",
+    "Reports the 8% as an observation, not as caused by the rewrite",
+    "Suggests how a future sitewide change could use a partial rollout or held-out control set to get a real answer next time"
+  ],
+  "forbiddenOutputs": [
+    "'Yes, the rewrite caused the 8% increase' or equivalent causal claim",
+    "Treating the capped verdict as a technicality to be argued around"
+  ]
+}

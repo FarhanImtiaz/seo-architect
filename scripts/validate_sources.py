@@ -94,7 +94,8 @@ def main():
         for sid,s in sources.items():
             try: urllib.request.urlopen(urllib.request.Request(s['url'],method='HEAD'),timeout=5)
             except Exception as e: warnings.append(f'{sid}: URL check failed: {e}')
-    result={'result':'pass' if not errors else 'fail','cardsChecked':len(cards),'sourcesChecked':len(sources),'errors':errors,'warnings':warnings}
+    pending_ids=[sid for sid,s in sources.items() if s.get('lastVerified')=='pending']
+    result={'result':'pass' if not errors else 'fail','cardsChecked':len(cards),'sourcesChecked':len(sources),'pendingCount':len(pending_ids),'pendingSourceIds':sorted(pending_ids),'errors':errors,'warnings':warnings}
     print(json.dumps(result,indent=2))
     return 1 if errors else 0
 if __name__=='__main__': raise SystemExit(main())

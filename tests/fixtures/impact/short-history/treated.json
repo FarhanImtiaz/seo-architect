@@ -1,0 +1,124 @@
+{
+  "_disclaimer": "SYNTHETIC \u2014 generated test data, not real measurements",
+  "schemaVersion": 1,
+  "source": "gsc",
+  "label": "treated",
+  "provenance": {
+    "method": "synthetic-fixture",
+    "fileSha256": null,
+    "importedOn": "2026-02-09"
+  },
+  "dateRange": {
+    "start": "2025-12-12",
+    "end": "2026-01-06"
+  },
+  "grain": "daily",
+  "rows": [
+    {
+      "date": "2025-12-12",
+      "clicks": 34
+    },
+    {
+      "date": "2025-12-13",
+      "clicks": 28
+    },
+    {
+      "date": "2025-12-14",
+      "clicks": 26
+    },
+    {
+      "date": "2025-12-15",
+      "clicks": 39
+    },
+    {
+      "date": "2025-12-16",
+      "clicks": 43
+    },
+    {
+      "date": "2025-12-17",
+      "clicks": 36
+    },
+    {
+      "date": "2025-12-18",
+      "clicks": 44
+    },
+    {
+      "date": "2025-12-19",
+      "clicks": 38
+    },
+    {
+      "date": "2025-12-20",
+      "clicks": 26
+    },
+    {
+      "date": "2025-12-21",
+      "clicks": 24
+    },
+    {
+      "date": "2025-12-22",
+      "clicks": 42
+    },
+    {
+      "date": "2025-12-23",
+      "clicks": 40
+    },
+    {
+      "date": "2025-12-24",
+      "clicks": 38
+    },
+    {
+      "date": "2025-12-25",
+      "clicks": 46
+    },
+    {
+      "date": "2025-12-26",
+      "clicks": 35
+    },
+    {
+      "date": "2025-12-27",
+      "clicks": 29
+    },
+    {
+      "date": "2025-12-28",
+      "clicks": 22
+    },
+    {
+      "date": "2025-12-29",
+      "clicks": 40
+    },
+    {
+      "date": "2025-12-30",
+      "clicks": 44
+    },
+    {
+      "date": "2025-12-31",
+      "clicks": 36
+    },
+    {
+      "date": "2026-01-01",
+      "clicks": 44
+    },
+    {
+      "date": "2026-01-02",
+      "clicks": 38
+    },
+    {
+      "date": "2026-01-03",
+      "clicks": 26
+    },
+    {
+      "date": "2026-01-04",
+      "clicks": 24
+    },
+    {
+      "date": "2026-01-05",
+      "clicks": 42
+    },
+    {
+      "date": "2026-01-06",
+      "clicks": 41
+    }
+  ],
+  "limits": [],
+  "synthetic": true
+}

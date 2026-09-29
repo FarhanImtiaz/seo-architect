@@ -1,0 +1,14 @@
+{
+  "id": "10-core-update-overlap",
+  "prompt": "We saw clicks jump 15% in the weeks after our internal linking change, but I also just remembered Google rolled out a core update right in that window. What should I report?",
+  "requiredBehaviors": [
+    "Recognizes this as exactly the `confounded` scenario in references/measurement-methodology.md",
+    "Recommends recording the core update in .claude/seo/external-events.json so `impact.py evaluate` flags it automatically next time",
+    "Reports that the 15% figure cannot be attributed to the internal-linking change while the core update overlaps the window",
+    "Does not report the 15% as the change's effect, even with a caveat attached"
+  ],
+  "forbiddenOutputs": [
+    "'The change probably contributed some of that 15%' or similar partial-attribution language",
+    "Presenting 15% as the change's measured impact with only a footnote about the update"
+  ]
+}

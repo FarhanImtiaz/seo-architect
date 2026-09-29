@@ -208,6 +208,11 @@ def graph(root):
     data={'routes':routes,'inboundContextual':inbound_contextual,'inboundGlobal':inbound_global,'orphans':orphans,'depth':depth,'anchorsByTarget':{k:sorted(set(v)) for k,v in anchors_by_target.items()}}
     target=root/'.claude/seo/link-graph.json'; target.parent.mkdir(parents=True,exist_ok=True); target.write_text(json.dumps(data,indent=2)+'\n')
     return emit('scan-link-graph',fs,[f'Built a graph over {len(routes)} discovered route(s); wrote {target.relative_to(root)}.'])
+NOINDEX_PATTERN=re.compile(
+    r'<meta[^>]+name=["\']robots["\'][^>]*content=["\'][^"\']*noindex'  # <meta name="robots" content="...noindex...">
+    r'|X-Robots-Tag["\']?\s*[:=]\s*["\']?[^"\'\n]*noindex'               # config-declared X-Robots-Tag header
+    r'|robots\s*:\s*\{[^}]*index\s*:\s*false',                          # Next.js metadata `robots: { index: false }`
+    re.I)
 IMG_TAG=re.compile(r'<(img|Image|NuxtImg)\b([^>]*)/?>',re.I)
 def _attr(attrs,name):
     m=re.search(rf'{name}\s*=\s*\{{?["\']([^"\']*)["\']\}}?',attrs,re.I)
@@ -238,11 +243,18 @@ def page_record(p,root):
     title=_scoped_matches(r'<title[^>]*>(.*?)</title>|title\s*:\s*[`\'\"]([^`\'\"]+)',text)
     desc=_scoped_matches(r'name=["\']description["\'][^>]*content=["\']([^"\']+)|description\s*:\s*[`\'\"]([^`\'\"]+)',text)
     canon=re.search(r'rel=["\']canonical["\'][^>]*href=["\']([^"\']+)',text,re.I)
-    noindex=bool(re.search(r'noindex',text,re.I))
+    noindex=bool(NOINDEX_PATTERN.search(text))
     visible=re.sub(r'<script\b.*?</script>|<style\b.*?</style>',' ',text,flags=re.I|re.S); visible=re.sub(r'<[^>]+>',' ',visible)
     word_count=len(re.findall(r'[A-Za-z]{2,}',visible))
     return {'source':rel(p,root),'hash':hashlib.sha256(text.encode()).hexdigest()[:16],'title':title[0].strip() if title else None,'description':desc[0].strip() if desc else None,'canonical':canon.group(1) if canon else None,'h1Count':len(re.findall(r'<h1\b',text,re.I)),'jsonldTypes':sorted(set(re.findall(r'"@type"\s*:\s*"([^"\n]+)',text))), 'internalLinkCount':len(re.findall(r'(?:href|to)=["\']/+',text,re.I)),'noindex':noindex,'wordCount':word_count}
-def snapshot(root):
+def _git_sha(root):
+    import subprocess
+    try:
+        p=subprocess.run(['git','rev-parse','--short','HEAD'],cwd=root,capture_output=True,text=True,timeout=5)
+        return p.stdout.strip() if p.returncode==0 and p.stdout.strip() else 'nogit'
+    except (OSError,subprocess.SubprocessError): return 'nogit'
+
+def snapshot(root,name=None):
     routes=[]; pages=[]
     for p in files(root):
         t=p.read_text(errors='ignore');
@@ -252,7 +264,14 @@ def snapshot(root):
         try:sitemaps += [n.text.strip() for n in ET.parse(p).findall('.//{*}loc') if n.text]
         except ET.ParseError:pass
     data={'version':2,'routes':sorted(routes),'pages':sorted(pages,key=lambda x:x['source']),'sitemapUrls':sorted(sitemaps),'robotsPresent':bool(list(root.rglob('robots.txt'))),'jsonldBlocks':sum(len(re.findall(r'application/ld\+json',p.read_text(errors='ignore'),re.I)) for p in files(root))}
-    target=root/'.claude/seo/baseline.json';target.parent.mkdir(parents=True,exist_ok=True);target.write_text(json.dumps(data,indent=2)+'\n');print(json.dumps({'tool':'seo-regression','action':'snapshot','file':str(target),'snapshot':data},indent=2));return 0
+    target=root/'.claude/seo/baseline.json';target.parent.mkdir(parents=True,exist_ok=True);target.write_text(json.dumps(data,indent=2)+'\n')
+    named_path=None
+    if name:
+        from datetime import date
+        snaps=root/'.claude/seo/snapshots'; snaps.mkdir(parents=True,exist_ok=True)
+        named_path=snaps/f'{date.today()}-{_git_sha(root)}.json'
+        named_path.write_text(json.dumps({**data,'label':name},indent=2)+'\n')
+    print(json.dumps({'tool':'seo-regression','action':'snapshot','file':str(target),'namedFile':str(named_path) if named_path else None,'snapshot':data},indent=2));return 0
 def regression(root):
     baseline=root/'.claude/seo/baseline.json'
     if not baseline.exists():return emit('seo-regression',[],['No baseline at .claude/seo/baseline.json. Run `seo_regression.py snapshot .` first.'])
@@ -270,11 +289,16 @@ def regression(root):
             if prior.get(key)!=now.get(key): fs.append({'severity':'MEDIUM','issue':f'Page SEO property changed: {key}','file':prior['source'],'before':prior.get(key),'after':now.get(key),'action':'Review intent, visible content, and migration record if applicable.'})
     return emit('seo-regression',fs,['Comparison is static and conservative; inspect intended route changes and runtime-generated assets.'])
 def main():
-    if len(sys.argv)<3: print('Usage: seo_tools.py <routes|metadata|sitemap|robots|jsonld|links|graph|images|snapshot|compare> <project>');return 2
+    if len(sys.argv)<3: print('Usage: seo_tools.py <routes|metadata|sitemap|robots|jsonld|links|graph|images|snapshot|compare> <project> [--name LABEL]');return 2
     command,root=sys.argv[1],Path(sys.argv[2]).resolve()
     if not root.is_dir():print(f'ERROR: project directory does not exist: {root}',file=sys.stderr);return 2
     handlers={'routes':route_scan,'metadata':metadata,'sitemap':sitemap,'robots':robots,'jsonld':jsonld,'links':links,'graph':graph,'images':images,'snapshot':snapshot,'compare':regression}
     if command not in handlers: print(f'ERROR: unknown command: {command}',file=sys.stderr); return 2
+    if command=='snapshot':
+        name=None
+        if '--name' in sys.argv[3:]:
+            i=sys.argv.index('--name'); name=sys.argv[i+1] if i+1<len(sys.argv) else None
+        return snapshot(root,name)
     return handlers[command](root)
 if __name__=='__main__':
     try: raise SystemExit(main())
