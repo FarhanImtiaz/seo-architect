@@ -9,8 +9,14 @@ import xml.etree.ElementTree as ET
 
 SKIP={'.git','node_modules','.next','dist','build','vendor','.venv','__pycache__'}
 TEXT={'.html','.htm','.jsx','.tsx','.js','.ts','.vue','.svelte','.astro','.mdx'}
+import os as _os
+MAX_FILES=int(_os.environ.get('SEO_ARCHITECT_MAX_FILES','0')) or None  # 0/unset = unlimited
 def files(root, suffixes=TEXT):
-    return [p for p in root.rglob('*') if p.is_file() and p.suffix.lower() in suffixes and not any(x in SKIP for x in p.parts)]
+    out=[]
+    for p in root.rglob('*'):
+        if MAX_FILES and len(out)>=MAX_FILES: break
+        if p.is_file() and p.suffix.lower() in suffixes and not any(x in SKIP for x in p.parts): out.append(p)
+    return out
 def emit(kind, items, notes=None):
     notes=notes or []
     print(json.dumps({'tool':kind,'findings':items,'notes':notes},indent=2)); return 1 if any(x.get('severity') in ('CRITICAL','HIGH') for x in items) else 0
@@ -60,18 +66,47 @@ def metadata(root):
         for value,count in Counter(values).items():
             if value and count>1: findings.append({'severity':'MEDIUM','issue':f'Duplicate {label}: {value[:100]}','count':count})
     return emit('scan-metadata',findings,[f'Inspected {len(seen)} text source files; dynamic metadata may not be detectable.'])
+LASTMOD_RE=re.compile(r'^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:?\d{2})?)?$')
 def sitemap(root):
     paths=list(root.rglob('sitemap*.xml'))
     if not paths:return emit('validate-sitemap',[],['No sitemap XML found; it may be generated dynamically or absent.'])
     fs=[]
     for p in paths:
         try:
-            tree=ET.parse(p); urls=[n.text.strip() for n in tree.findall('.//{*}loc') if n.text]
+            tree=ET.parse(p); root_el=tree.getroot(); tag=root_el.tag.split('}')[-1]
+            if tag=='sitemapindex':
+                sub=[n.text.strip() for n in tree.findall('.//{*}loc') if n.text]
+                fs.append({'severity':'INFO','file':rel(p,root),'issue':f'Sitemap index references {len(sub)} sub-sitemap(s); those files are not fetched or validated here.'})
+                continue
+            urls=[n.text.strip() for n in tree.findall('.//{*}loc') if n.text]
             if not urls: fs.append({'severity':'HIGH','file':rel(p,root),'issue':'Sitemap has no <loc> URLs.'})
+            if len(urls)>50000: fs.append({'severity':'MEDIUM','file':rel(p,root),'issue':f'Sitemap has {len(urls)} URLs, over the 50,000-URL protocol limit; split into multiple sitemaps with a sitemap index.'})
+            if p.stat().st_size>50*1024*1024: fs.append({'severity':'MEDIUM','file':rel(p,root),'issue':'Sitemap file exceeds the 50MB (uncompressed) protocol limit.'})
+            lastmods=[]
+            for url_el in tree.findall('.//{*}url'):
+                loc=url_el.find('{*}loc'); lm=url_el.find('{*}lastmod')
+                if lm is not None and lm.text:
+                    text=lm.text.strip(); lastmods.append(text)
+                    if not LASTMOD_RE.match(text): fs.append({'severity':'LOW','file':rel(p,root),'issue':f'lastmod "{text}" is not W3C datetime format.','loc':loc.text if loc is not None else None})
+                    else:
+                        try:
+                            d=text[:10]; y,m,dday=int(d[:4]),int(d[5:7]),int(d[8:10])
+                            from datetime import date as _date
+                            if _date(y,m,dday)>_date.today(): fs.append({'severity':'LOW','file':rel(p,root),'issue':f'lastmod "{text}" is in the future.','loc':loc.text if loc is not None else None})
+                        except ValueError: pass
+                for tag_name,label in (('priority','priority'),('changefreq','changefreq')):
+                    el=url_el.find('{*}'+tag_name)
+                    if el is not None: fs.append({'severity':'INFO','file':rel(p,root),'issue':f'<{label}> is present but Google ignores this signal; safe to omit.'})
+            if len(lastmods)>3 and len(set(lastmods))==1:
+                fs.append({'severity':'LOW','file':rel(p,root),'issue':f'All {len(lastmods)} URLs share the identical lastmod "{lastmods[0]}"; Google only trusts lastmod when it is "consistently and verifiably accurate" per URL.'})
             for u in urls:
                 x=urlparse(u)
                 if x.scheme not in ('http','https') or not x.netloc: fs.append({'severity':'HIGH','file':rel(p,root),'issue':f'Invalid absolute URL: {u}'})
         except ET.ParseError as e: fs.append({'severity':'CRITICAL','file':rel(p,root),'issue':f'Invalid XML: {e}'})
+    robots_files=list(root.rglob('robots.txt'))
+    if robots_files and paths:
+        has_sitemap_directive=any(re.search(r'(?im)^sitemap\s*:',rf.read_text(errors='ignore')) for rf in robots_files)
+        if not has_sitemap_directive: fs.append({'severity':'LOW','issue':'robots.txt has no Sitemap: directive pointing at the sitemap.'})
     return emit('validate-sitemap',fs,[f'Validated {len(paths)} sitemap file(s).'])
 def robots(root):
     paths=list(root.rglob('robots.txt'))
@@ -285,8 +320,11 @@ def regression(root):
     for prior in old.get('pages',[]):
         now=current.get(prior['source'])
         if not now: continue
-        for key in ('title','description','canonical','h1Count','jsonldTypes'):
-            if prior.get(key)!=now.get(key): fs.append({'severity':'MEDIUM','issue':f'Page SEO property changed: {key}','file':prior['source'],'before':prior.get(key),'after':now.get(key),'action':'Review intent, visible content, and migration record if applicable.'})
+        for key in ('title','description','canonical','h1Count','jsonldTypes','noindex'):
+            if prior.get(key)!=now.get(key):
+                severity='HIGH' if key=='noindex' and now.get(key) and not prior.get(key) else 'MEDIUM'
+                issue=f'Page newly set to noindex since baseline.' if key=='noindex' and now.get(key) and not prior.get(key) else f'Page SEO property changed: {key}'
+                fs.append({'severity':severity,'issue':issue,'file':prior['source'],'before':prior.get(key),'after':now.get(key),'action':'Review intent, visible content, and migration record if applicable.'})
     return emit('seo-regression',fs,['Comparison is static and conservative; inspect intended route changes and runtime-generated assets.'])
 def main():
     if len(sys.argv)<3: print('Usage: seo_tools.py <routes|metadata|sitemap|robots|jsonld|links|graph|images|snapshot|compare> <project> [--name LABEL]');return 2

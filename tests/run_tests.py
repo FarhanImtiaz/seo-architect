@@ -2,7 +2,7 @@
 import json, re, subprocess, sys, tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-ROOT=Path(__file__).resolve().parents[1]; TOOLS=ROOT/'scripts/seo_tools.py'; INIT=ROOT/'scripts/init_state.py'; FIX=ROOT/'tests/fixtures/site'; HOOK=ROOT/'scripts/guardian_hook.py'; LEDGER=ROOT/'scripts/evidence_ledger.py'; CONTRACT=ROOT/'scripts/validate_page_contract.py'; FRAMEWORK=ROOT/'scripts/framework_inspect.py'; ADAPTERS=ROOT/'scripts/framework_adapters.py'; AEO=ROOT/'scripts/validate_aeo.py'; FULL=ROOT/'scripts/full_audit.py'; CLAUDE=ROOT/'scripts/validate_claude_skill.py'; SCORE=ROOT/'scripts/score.py'; VALSRC=ROOT/'scripts/validate_sources.py'; PATTERNMATCH=ROOT/'scripts/pattern_match.py'; LINKGRAPH=ROOT/'scripts/scan_link_graph.py'; IMAGES=ROOT/'scripts/scan_images.py'; METAEXTRACT=ROOT/'scripts/metadata_extract.py'; HREFLANG=ROOT/'scripts/validate_hreflang.py'; LIVEDATA=ROOT/'scripts/live_data.py'
+ROOT=Path(__file__).resolve().parents[1]; TOOLS=ROOT/'scripts/seo_tools.py'; INIT=ROOT/'scripts/init_state.py'; FIX=ROOT/'tests/fixtures/site'; HOOK=ROOT/'scripts/guardian_hook.py'; LEDGER=ROOT/'scripts/evidence_ledger.py'; CONTRACT=ROOT/'scripts/validate_page_contract.py'; FRAMEWORK=ROOT/'scripts/framework_inspect.py'; ADAPTERS=ROOT/'scripts/framework_adapters.py'; AEO=ROOT/'scripts/validate_aeo.py'; FULL=ROOT/'scripts/full_audit.py'; CLAUDE=ROOT/'scripts/validate_claude_skill.py'; SCORE=ROOT/'scripts/score.py'; VALSRC=ROOT/'scripts/validate_sources.py'; PATTERNMATCH=ROOT/'scripts/pattern_match.py'; LINKGRAPH=ROOT/'scripts/scan_link_graph.py'; IMAGES=ROOT/'scripts/scan_images.py'; METAEXTRACT=ROOT/'scripts/metadata_extract.py'; HREFLANG=ROOT/'scripts/validate_hreflang.py'; LIVEDATA=ROOT/'scripts/live_data.py'; CI=ROOT/'scripts/ci_check.py'; REDIRECTS=ROOT/'scripts/scan_redirects.py'; CANONICALS=ROOT/'scripts/scan_canonicals.py'; FRESHNESS=ROOT/'scripts/scan_freshness.py'; RENDERDIFF=ROOT/'scripts/render_diff.py'; SCANLOGS=ROOT/'scripts/scan_logs.py'; PLATFORMS=ROOT/'scripts/platform_detect.py'; PLATFORMFIX=ROOT/'tests/fixtures/platforms'; AIACCESS=ROOT/'scripts/validate_ai_access.py'; COMPETITOR=ROOT/'scripts/competitor_diff.py'; BUILDDIST=ROOT/'scripts/build_dist.py'
 def run(*args, ok=(0,)):
  p=subprocess.run([sys.executable,*map(str,args)],capture_output=True,text=True)
  if p.returncode not in ok: raise AssertionError(f'{args}: {p.returncode}\n{p.stdout}\n{p.stderr}')
@@ -777,6 +777,284 @@ def guardian_hook_catches_noindex_regardless_of_path():
   {'tool_input':{'file_path':'/middleware.ts','content':'res.headers.set("X-Robots-Tag","noindex")'}},
  ]
  for event in cases: assert ask(event)=='ask', f'a noindex directive must always trigger review: {event}'
+EX=ROOT/'examples/worked-example-nextjs'
+import shutil
+def _ci_pair():
+ # full_audit.py --score (which ci_check.py runs on both sides) writes .claude/seo/baseline.json
+ # into whatever directory it's pointed at -- copy the committed fixtures to a scratch dir first
+ # so these tests never mutate examples/worked-example-nextjs in place (that corrupted the golden
+ # `worked_example_before_after_matches_golden_summary` fixture during development of this test).
+ td=Path(tempfile.mkdtemp()); before=td/'before'; after=td/'after'
+ shutil.copytree(EX/'before',before); shutil.copytree(EX/'after',after)
+ return before,after
+
+@test
+def ci_check_worked_example_before_to_after_has_no_new_findings_and_passes():
+ before,after=_ci_pair()
+ out=json.loads(run(CI,after,'--base-dir',before,ok=(0,)))
+ assert out['diff']['newFindings']==[], f'fixing the issues must not introduce new findings: {out["diff"]["newFindings"]}'
+ assert out['triggers']==[], f'an improving diff must not trigger any failOn rule: {out}'
+ assert out['diff']['scoreDelta']>0, f'the after fixture should score higher than before: {out["diff"]["scoreDelta"]}'
+
+@test
+def ci_check_worked_example_after_to_before_is_a_regression_and_fails():
+ before,after=_ci_pair()
+ p=subprocess.run([sys.executable,str(CI),str(before),'--base-dir',str(after)],capture_output=True,text=True)
+ assert p.returncode==1, f'reintroducing the before-fixture issues must fail the CI check: {p.stdout}{p.stderr}'
+ dec=json.JSONDecoder(); out,_=dec.raw_decode(p.stdout)
+ assert 'new-high' in out['triggers'], f'the reintroduced HIGH jsonld finding must trigger new-high: {out}'
+ assert len(out['diff']['newFindings'])>0
+
+@test
+def ci_check_expired_ignore_still_fails_the_build():
+ before,after=_ci_pair()
+ # find one real new-finding fingerprint by running the regression comparison once, unfiltered
+ raw=run(CI,before,'--base-dir',after,ok=(0,1))
+ dec=json.JSONDecoder(); first,_=dec.raw_decode(raw)
+ assert first['diff']['newFindings'], 'need at least one real new finding to build this fixture'
+ f=first['diff']['newFindings'][0]
+ fp='|'.join([f['tool'],str(f.get('severity','')),(f.get('issue') or '').strip(),(f.get('file') or '').strip()])
+ cfg={'failOn':['new-critical','new-high'],'ignore':[{'fingerprint':fp,'reason':'test','expires':'2000-01-01'}]}
+ # ci_check.py reads .claude/seo/ci.json relative to the PROJECT dir (the head), which here is `before`
+ ci_json=before/'.claude/seo/ci.json'; ci_json.parent.mkdir(parents=True,exist_ok=True)
+ ci_json.write_text(json.dumps(cfg))
+ out2=subprocess.run([sys.executable,str(CI),str(before),'--base-dir',str(after)],capture_output=True,text=True)
+ assert out2.returncode==1, 'an EXPIRED ignore must not suppress the finding -- the build must still fail'
+ parsed,_=dec.raw_decode(out2.stdout)
+ assert parsed['expiredIgnores'], f'the expired ignore must be reported, not silently dropped: {parsed}'
+
+@test
+def ci_check_sarif_has_required_keys():
+ before,after=_ci_pair()
+ out_path=before/'r.sarif'
+ run(CI,before,'--base-dir',after,'--sarif',out_path,ok=(0,1))
+ sarif=json.loads(out_path.read_text())
+ assert sarif['version']=='2.1.0'
+ run_=sarif['runs'][0]; assert run_['tool']['driver']['name']
+ assert isinstance(run_['results'],list) and run_['results']
+ assert run_['results'][0]['locations'][0]['physicalLocation']['artifactLocation']['uri']
+
+@test
+def scan_redirects_detects_chain_loop_and_unresolved_target():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td)
+  (p/'next.config.js').write_text("module.exports={async redirects(){return ["
+   "{source:'/old',destination:'/mid',permanent:true},"
+   "{source:'/mid',destination:'/new',permanent:true},"
+   "{source:'/loopA',destination:'/loopB',permanent:true},"
+   "{source:'/loopB',destination:'/loopA',permanent:true},"
+   "{source:'/dead',destination:'/nowhere',permanent:true}"
+   "]}}")
+  (p/'app/new').mkdir(parents=True); (p/'app/new/page.html').write_text('<html><title>x</title></html>')
+  (p/'app/page.html').write_text('<html><title>home</title></html>')
+  out=json.loads(run(REDIRECTS,p,ok=(0,1)))
+  issues=[f['issue'] for f in out['findings']]
+  assert any('chain of 2 hop' in i for i in issues), issues
+  assert any(f['severity']=='CRITICAL' and 'loop' in f['issue'].lower() for f in out['findings']), issues
+  assert any('does not resolve to a known route' in i for i in issues), issues
+
+@test
+def scan_canonicals_flags_noindex_canonical_and_near_duplicates():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td); (p/'app/a').mkdir(parents=True); (p/'app/b').mkdir(parents=True)
+  body='<html><head><title>Widget City Downtown</title><link rel="canonical" href="https://x.com/a"/>'\
+       '<meta name="robots" content="noindex"></head><body>'+' '.join(f'word{i}' for i in range(60))+'</body></html>'
+  (p/'app/a/page.html').write_text(body)
+  body_b=body.replace('href="https://x.com/a"','href="https://x.com/b"').replace('Downtown','Uptown')
+  (p/'app/b/page.html').write_text(body_b)
+  out=json.loads(run(CANONICALS,p,ok=(0,1)))
+  rules={f['rule'] for f in out['findings'] if 'rule' in f}
+  assert 'canonical-on-noindex' in rules, out['findings']
+  assert 'near-duplicate-heuristic' in rules, out['findings']
+
+@test
+def scan_freshness_flags_declared_date_newer_than_last_real_change():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td)
+  subprocess.run(['git','init','-q'],cwd=p,check=True)
+  subprocess.run(['git','config','user.email','t@example.com'],cwd=p,check=True)
+  subprocess.run(['git','config','user.name','t'],cwd=p,check=True)
+  (p/'app/a').mkdir(parents=True)
+  f=p/'app/a/page.html'
+  f.write_text('<html><head><title>A</title></head><body>real content here, first version</body></html>')
+  subprocess.run(['git','add','-A'],cwd=p,check=True)
+  env={'GIT_AUTHOR_DATE':'2024-01-01T00:00:00','GIT_COMMITTER_DATE':'2024-01-01T00:00:00'}
+  import os; full_env=dict(os.environ); full_env.update(env)
+  subprocess.run(['git','commit','-q','-m','initial'],cwd=p,check=True,env=full_env)
+  # a second, trivial (whitespace-only) commit must NOT count as the "last significant change"
+  f.write_text(f.read_text()+'  ')
+  subprocess.run(['git','add','-A'],cwd=p,check=True)
+  env2=dict(full_env); env2['GIT_AUTHOR_DATE']='2024-06-01T00:00:00'; env2['GIT_COMMITTER_DATE']='2024-06-01T00:00:00'
+  subprocess.run(['git','commit','-q','-m','whitespace only'],cwd=p,check=True,env=env2)
+  # now claim a much later "updated" date than any real content change
+  f.write_text(f.read_text()+'<meta itemprop="dateModified" content="2026-01-01">'.replace('  <meta','<meta'))
+  # rewrite with the dateModified actually embedded in a parseable spot
+  f.write_text('<html><head><title>A</title><script type="application/ld+json">{"dateModified":"2026-01-01"}</script></head><body>real content here, first version</body></html>')
+  out=json.loads(run(FRESHNESS,p,ok=(0,1)))
+  assert any(f_['rule']=='freshness-date-mismatch' for f_ in out['findings']), out
+
+@test
+def render_diff_flags_canonical_title_and_render_only_links():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td); (p/'response').mkdir(); (p/'rendered').mkdir()
+  (p/'response/a.html').write_text('<html><head><title>A</title><link rel="canonical" href="https://x.com/a"/></head><body>hi</body></html>')
+  (p/'rendered/a.html').write_text('<html><head><title>A - r</title><link rel="canonical" href="https://x.com/a-r"/></head><body>hi <a href="/extra">e</a></body></html>')
+  out=json.loads(run(RENDERDIFF,'--response',p/'response','--rendered',p/'rendered',ok=(0,1)))
+  issues=' '.join(f['issue'] for f in out['findings'])
+  assert 'Canonical differs' in issues and 'Title differs' in issues and 'exist only after rendering' in issues, out
+
+@test
+def render_diff_without_rendered_only_flags_noindex_and_says_so():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td); (p/'response').mkdir()
+  (p/'response/a.html').write_text('<html><head><meta name="robots" content="noindex"></head><body>hi</body></html>')
+  out=json.loads(run(RENDERDIFF,'--response',p/'response',ok=(0,)))
+  assert any(f['severity']=='INFO' and 'noindex' in f['issue'].lower() for f in out['findings']), out
+  assert any('No --rendered input given' in n for n in out['notes']), out
+
+@test
+def scan_logs_spoofed_googlebot_is_unverified_real_one_is_verified():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td); log=p/'access.log'
+  log.write_text('\n'.join([
+   '66.249.66.1 - - [01/Jan/2026:00:00:00 +0000] "GET /a HTTP/1.1" 200 512 "-" "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"',
+   '1.2.3.4 - - [01/Jan/2026:00:00:01 +0000] "GET /b HTTP/1.1" 200 512 "-" "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"',
+   '203.0.113.5 - - [01/Jan/2026:00:00:02 +0000] "GET /c?utm=1 HTTP/1.1" 404 0 "-" "GPTBot/1.0"',
+  ]))
+  ranges=p/'ranges.json'; ranges.write_text(json.dumps({'prefixes':[{'ipv4Prefix':'66.249.64.0/19'}]}))
+  out=json.loads(run(SCANLOGS,log,'--ranges',ranges,ok=(0,1)))
+  gb=out['summary']['byBotStatus']['Googlebot']
+  assert gb.get('200:verified')==1 and gb.get('200:unverified')==1, gb
+  assert out['summary']['topParamUrls']==[['/c?utm=1',1]], out['summary']['topParamUrls']
+  assert out['summary']['top404s']==[['/c',1]], out['summary']['top404s']
+
+@test
+def scan_logs_never_persists_a_raw_ip():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td); log=p/'access.log'
+  log.write_text('203.0.113.77 - - [01/Jan/2026:00:00:00 +0000] "GET /a HTTP/1.1" 200 512 "-" "GPTBot/1.0"')
+  out=run(SCANLOGS,log,ok=(0,1))
+  assert '203.0.113.77' not in out, 'a raw, untruncated IP must never appear in scan_logs.py output'
+
+@test
+def platform_detect_ssg_frontmatter_flags_draft_in_sitemap_and_no_desc():
+ out=json.loads(run(PLATFORMS,PLATFORMFIX/'ssg-frontmatter',ok=(0,1)))
+ assert 'ssg-frontmatter' in out['detected']
+ issues=[f['issue'] for f in out['platforms']['ssg-frontmatter']['findings']]
+ assert any('draft:true' in i and 'sitemap' in i for i in issues), issues
+ assert out['platforms']['ssg-frontmatter']['unavailable']==[]
+
+@test
+def platform_detect_wordpress_flags_missing_wp_head_and_reports_unavailable():
+ out=json.loads(run(PLATFORMS,PLATFORMFIX/'wordpress',ok=(0,1)))
+ assert 'wordpress' in out['detected']
+ wp=out['platforms']['wordpress']
+ assert any('wp_head()' in f['issue'] for f in wp['findings']), wp['findings']
+ assert wp['unavailable'], 'WordPress adapter must report what it cannot see (plugin-owned SEO data), not stay silent about it'
+
+@test
+def platform_detect_shopify_flags_missing_theme_tags_and_reports_unavailable():
+ out=json.loads(run(PLATFORMS,PLATFORMFIX/'shopify',ok=(0,)))
+ assert 'shopify' in out['detected']
+ sp=out['platforms']['shopify']
+ assert any('canonical_url' in f['issue'] for f in sp['findings']), sp['findings']
+ assert sp['unavailable']
+
+@test
+def platform_detect_webflow_flags_missing_title_and_reports_cms_collections_unavailable():
+ out=json.loads(run(PLATFORMS,PLATFORMFIX/'webflow',ok=(0,)))
+ assert 'webflow' in out['detected']
+ wf=out['platforms']['webflow']
+ assert any('no title' in f['issue'].lower() for f in wf['findings']), wf['findings']
+ assert wf['unavailable']
+
+@test
+def platform_detect_headless_cms_flags_missing_slug_and_reports_unavailable():
+ out=json.loads(run(PLATFORMS,PLATFORMFIX/'headless-cms',ok=(0,1)))
+ assert 'headless-cms' in out['detected']
+ hc=out['platforms']['headless-cms']
+ assert any('slug field' in f['issue'] for f in hc['findings']), hc['findings']
+ assert hc['unavailable']
+
+@test
+def platform_detect_finds_nothing_on_a_plain_nextjs_project():
+ with tempfile.TemporaryDirectory() as td:
+  before=Path(td)/'before'; import shutil as _sh; _sh.copytree(EX/'before',before)
+  out=json.loads(run(PLATFORMS,before,ok=(0,)))
+  assert out['detected']==[], out['detected']
+
+@test
+def validate_ai_access_respects_bot_specific_group_over_wildcard():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td)
+  (p/'robots.txt').write_text('User-agent: GPTBot\nDisallow: /\n\nUser-agent: *\nAllow: /\n')
+  out=json.loads(run(AIACCESS,p,ok=(0,)))
+  assert out['accessMatrix']['GPTBot']['blocked'] is True, out['accessMatrix']['GPTBot']
+  assert out['accessMatrix']['ClaudeBot']['blocked'] is False, out['accessMatrix']['ClaudeBot']
+  assert any('GPTBot' in f['issue'] for f in out['findings'])
+  # never a recommendation to allow/block, only a report of the current policy and its documented
+  # consequence (the tool's own disclaimer text legitimately contains "recommends", so check for
+  # actual advisory phrasing rather than the bare substring)
+  full=json.dumps(out).lower()
+  assert 'you should' not in full and 'we recommend' not in full
+
+@test
+def competitor_diff_ssrf_guard_blocks_loopback_and_never_stores_body_text():
+ out=json.loads(run(COMPETITOR,'http://127.0.0.1/internal',ok=(0,)))
+ assert out['errors'] and out['errors'][0].get('blocked') is True, out['errors']
+ assert out['competitors']==[]
+
+@test
+def competitor_diff_from_file_reports_structure_not_body_text():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td)/'c.html'
+  secret='xyzzy-secret-competitor-copy-do-not-leak'
+  p.write_text(f'<html><head><title>Competitor Title</title></head><body><h1>H</h1>{secret} one two three four five six</body></html>')
+  out=run(COMPETITOR,'--from-file',f'https://comp.example/x={p}',ok=(0,))
+  assert secret not in out, 'competitor body text must never appear in the tool output'
+  parsed=json.loads(out)
+  assert parsed['competitors'][0]['titleLength']==len('Competitor Title')
+  assert parsed['competitors'][0]['wordCount']>0
+  full=parsed.copy(); full_text=json.dumps(full).lower()
+  assert 'why they rank' not in full_text and 'will rank' not in full_text
+
+@test
+def live_data_import_ai_referrals_filters_to_known_ai_hosts_and_flags_undercount():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td); run(INIT,'--project',p)
+  csv=p/'ref.csv'; csv.write_text('date,source,sessions\n2026-01-01,chatgpt.com,12\n2026-01-01,google.com,500\n2026-01-02,perplexity.ai,3\n')
+  out=json.loads(run(LIVEDATA,'import-ai-referrals',p,csv,'--start','2026-01-01','--end','2026-01-02',ok=(0,)))
+  assert out['rowsImported']==2 and out['rowsInSource']==3, out
+  written=json.loads(Path(out['wrote']).read_text())
+  assert 'UNDERCOUNTS' in written['limits']
+
+@test
+def build_dist_produces_a_valid_plugin_layout_without_duplicating_plugin_files():
+ with tempfile.TemporaryDirectory() as td:
+  out=Path(td)/'dist'
+  run(BUILDDIST,out,ok=(0,))
+  plugin=json.loads((out/'.claude-plugin/plugin.json').read_text())
+  hooks=json.loads((out/'hooks/hooks.json').read_text())
+  assert plugin['name']=='seo-architect'
+  assert 'CLAUDE_PLUGIN_ROOT' in hooks['PreToolUse'][0]['hooks'][0]['command']
+  assert (out/'skills/seo-architect/SKILL.md').exists()
+  assert (out/'skills/seo-architect/scripts/guardian_hook.py').exists()
+  assert not (out/'skills/seo-architect/.claude-plugin').exists(), 'plugin.json must not be duplicated inside skills/seo-architect'
+  assert not (out/'skills/seo-architect/hooks').exists(), 'hooks.json must not be duplicated inside skills/seo-architect'
+
+@test
+def seo_tools_max_files_env_cap_bounds_scan_time_on_a_large_tree():
+ import os,time
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td)
+  for i in range(5000):
+   d=p/f'app/page{i}'; d.mkdir(parents=True); (d/'page.html').write_text(f'<html><title>P{i}</title></html>')
+  env=dict(os.environ); env['SEO_ARCHITECT_MAX_FILES']='200'
+  t0=time.time()
+  r=subprocess.run([sys.executable,str(TOOLS),'metadata',str(p)],capture_output=True,text=True,env=env)
+  elapsed=time.time()-t0
+  assert r.returncode in (0,1), r.stderr
+  assert elapsed<30, f'a 5000-file tree with SEO_ARCHITECT_MAX_FILES=200 took {elapsed:.1f}s -- the cap is not bounding scan time'
 
 def main():
  failures=[]

@@ -1,0 +1,13 @@
+# Platform coverage
+
+`scripts/platform_detect.py` detects and scans non-framework-code platforms (WordPress, Shopify, Webflow, headless CMS content models, SSG frontmatter) alongside the framework-code adapters in `framework_adapters.py`. Every platform's `unavailable[]` entries are real, checked limits, not a guess — `score.py` lowers `coveragePct` for them rather than treating unscannable content as passing.
+
+| Platform | Static (in the repo) | Unavailable without an authorized export/import |
+|---|---|---|
+| **SSG frontmatter** (Hugo, Jekyll, Eleventy, Docusaurus, Gatsby, Astro content) | title/description/slug/draft/canonical from YAML frontmatter; duplicate-slug detection; `draft:true` pages leaking into the sitemap | Nothing beyond build/runtime — content lives in the repo. |
+| **Headless CMS content models** (Sanity, Payload, Strapi, Contentful) | Whether the content type SCHEMA enforces a slug and an SEO-related field — a model-level contract, not the actual entries | The entries themselves, which live in the CMS's database. Provide an offline export (Sanity `.ndjson`, Contentful export JSON) to check real content. |
+| **Webflow export** | All statically-exported pages (`data-wf-page` markers), scanned like any other HTML | CMS Collection pages — Webflow's code export does not include them. Provide a Collection CSV export to check slug/SEO-field coverage. |
+| **Shopify theme** | `layout/theme.liquid`'s `canonical_url`/`page_title`/`page_description`, `templates/robots.txt.liquid` if present, Product JSON-LD using theme variant data, `<img>` width/`image_tag` usage | Sitemap, product/collection catalog, and Markets hreflang — all platform-generated and DB-owned. Provide a product/collection CSV export to check those. |
+| **WordPress theme** | `add_theme_support('title-tag')`, `wp_head()` presence in `header.php`, a hard-coded `<title>`/canonical that would conflict with an SEO plugin, block-theme `theme.json` | Actual page titles, canonicals, sitemap, and schema — usually owned by an SEO plugin (Yoast/Rank Math) or the database. Opt into an unauthenticated public REST import (`/wp-json/wp/v2/pages`, rate-limited, against the user's own site) to check those. |
+
+None of these adapters ever silently guess at content they cannot see. If a category's evidence comes entirely from an `unavailable` platform check, `score.py` marks that category `unavailable` rather than scoring it.

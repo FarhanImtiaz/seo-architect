@@ -25,4 +25,8 @@ method above works with no extra configuration. If neither path resolves, the ho
 visible warning to stderr and allows the edit unreviewed — it never blocks a `Write`/`Edit` call on
 its own path failure, only on an actual review-worthy finding.
 
+## Plugin install (advanced)
+
+The two options above install this repo directly as a standalone skill — that's the default, documented path and the one this file otherwise describes. If you're distributing this as a Claude Code *plugin* instead, `python3 scripts/build_dist.py <out-dir>` assembles a plugin-shaped layout (`.claude-plugin/plugin.json`, `hooks/hooks.json` using `${CLAUDE_PLUGIN_ROOT}`, and the skill itself under `skills/seo-architect/`) from this same source without duplicating or forking it.
+
 See [CHANGELOG.md](CHANGELOG.md) for what's currently implemented.

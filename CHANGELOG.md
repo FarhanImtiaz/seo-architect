@@ -10,6 +10,95 @@ you bump the rubric, add a dated entry below that states the new rubric version 
 
 ## [Unreleased]
 
+### Added
+- `scripts/ci_check.py`: PR/CI-time SEO regression check. Runs `full_audit.py --score` on a base
+  ref (via `git archive`, no working-tree checkout needed) and on the current project inside
+  disposable scratch copies (it never mutates either directory's real `.claude/seo/baseline.json`
+  as a side effect of being run), diffs findings by a stable fingerprint, and reports new/resolved
+  findings, removed routes without a matching redirect, and a score delta — or "not comparable" if
+  the rubric version changed between base and head. Outputs JSON, a Markdown step summary, GitHub
+  annotations, and optional SARIF. No network or secrets required by default. See
+  `workflows/ci.md`, `templates/ci.json`, `templates/github-action/seo-architect.yml`, `action.yml`
+  (a pin-by-SHA composite action; triggers on `pull_request` only, never `pull_request_target`),
+  and `.pre-commit-hooks.yaml`.
+- `scripts/seo_tools.py`: `regression()`'s per-page comparison now also tracks `noindex`, flagging
+  a page newly set to noindex since the baseline as HIGH (previously silent).
+- Site-wide technical depth: `scripts/scan_redirects.py` (redirect chains/loops/unresolved
+  targets from `next.config.*`, `vercel.json`, `netlify.toml`, `_redirects`, `.htaccess`, nginx
+  `.conf`; unparseable sources like Nuxt `routeRules` are reported `unavailable`, never silently
+  treated as "no redirects"); `scripts/scan_canonicals.py` (canonical graph: missing/host-mismatch/
+  chain/noindex-target, plus a shingle-overlap near-duplicate heuristic); `scripts/scan_freshness.py`
+  (flags a declared "updated"/`dateModified` date newer than the actual last significant git
+  change, skipping whitespace/year-only diffs; skipped entirely, with a note, outside a git repo);
+  `scripts/render_diff.py` (response-vs-rendered HTML diff for canonical/title/links/JSON-LD that
+  only exist after JavaScript runs; without `--rendered` it only checks for noindex-skips-rendering
+  and says so); `scripts/scan_logs.py` (user-supplied access logs only, never fetched -- a bot
+  user-agent is "ua-claimed" unless verified against a vendor's published IP ranges via `--ranges`;
+  IPs are truncated before any aggregate is written, raw logs are never persisted). `validate_sitemap`
+  (in `scripts/seo_tools.py`) now also checks lastmod format/future-dates/all-identical-lastmod,
+  demotes priority/changefreq to INFO ("Google ignores these"), checks the 50k-URL/50MB limits,
+  handles sitemap-index recursion, and checks for a robots.txt `Sitemap:` directive.
+  `redirects`/`canonicals`/`freshness` are registered in `full_audit.py`'s `TOOLS`, so their
+  findings appear in every audit; they don't yet feed `rubric.json`/`score.py` (that would need a
+  rubric version bump, deferred to keep this phase additive and non-breaking to existing scores).
+  `render_diff.py`/`scan_logs.py` need explicit input paths (real build output, a real log file) so
+  they're standalone tools, not part of the default audit, matching how `live_data.py` works.
+- Platform adapters for non-framework-code projects: `scripts/platform_detect.py` orchestrates
+  `scripts/platforms/{ssg_frontmatter,headless_cms,webflow,shopify,wordpress}.py`. Each reports a
+  real, checked `unavailable[]` list for content it cannot statically see (a headless CMS's actual
+  entries, Webflow CMS Collection pages, Shopify's DB-owned catalog/sitemap, WordPress content
+  usually owned by an SEO plugin) rather than silently guessing it's fine — `score.py` lowers
+  `coveragePct` for those, matching the framework-code adapters' honesty model. See
+  `references/platform-coverage.md` for the full per-platform matrix. Registered in
+  `full_audit.py`'s `TOOLS` as `platforms`; not yet wired into `rubric.json` (additive, same
+  reasoning as Phase 11's new tools).
+- AEO access/eligibility, citation imports, competitor structural diff: `scripts/validate_ai_access.py`
+  parses robots.txt with real per-group precedence (a bot-specific group correctly wins over a
+  wildcard group, not just "does the token appear anywhere"), reports each named AI crawler's
+  current access and the DOCUMENTED consequence of blocking it per that vendor's own crawler
+  docs -- it never recommends allowing or blocking one, since that's the site owner's decision.
+  `scripts/live_data.py` gained `import-bing-ai` (Bing Webmaster Tools AI Performance CSV) and
+  `import-ai-referrals` (GA4 referral sessions filtered to known AI-assistant hosts, with an
+  explicit systematic-undercount caveat since many AI clicks arrive referrer-less) -- both feed
+  `impact.py` as ordinary metrics; no composite "AI visibility score" is ever computed.
+  `scripts/competitor_diff.py` diffs a user-named PUBLIC page's structure (title length, heading
+  outline, schema types, word count, FAQ/table/author/date signals, canonical, hreflang, internal
+  links) against your own -- body text is never stored, only a content hash; an SSRF guard refuses
+  private/loopback/link-local/reserved IPs (checked after DNS resolution, not just the literal
+  hostname) before any fetch, robots.txt is respected, and requests are rate-limited to one per
+  2 seconds. Output is always framed as "structural differences", never "why they rank" -- this
+  tool has no ranking data and must never imply it does. `aiAccess` is registered in
+  `full_audit.py`'s `TOOLS`; `competitor_diff.py` is a standalone tool (needs explicit URLs).
+- Distribution, performance, ongoing verification: `.claude-plugin/plugin.json` + `hooks/hooks.json`
+  (using `${CLAUDE_PLUGIN_ROOT}`, the reliably-expanded plugin-root variable — see the Phase-1
+  fix history below for why `${CLAUDE_SKILL_DIR}` was never safe to rely on) + `scripts/build_dist.py`,
+  which assembles a plugin-shaped distribution (`skills/seo-architect/...`) from this repo's
+  standalone-skill layout without duplicating or forking the source of truth; the standalone
+  install path in `INSTALL.md` is unaffected. `.github/workflows/test.yml` runs the suite and
+  both validators across Python 3.9-3.13 (agent-evals need real `claude -p` auth and are
+  deliberately not run in CI). `scripts/seo_tools.py`'s `files()` now honors a
+  `SEO_ARCHITECT_MAX_FILES` environment variable to bound scan time on very large trees (default:
+  unlimited, unchanged behavior). New `workflows/verify-sources.md` (the process for clearing a
+  `lastVerified:"pending"` source) and `references/security.md` (the credential/network/SSRF/
+  IP-truncation rules this skill follows, collected in one place).
+- Live-measurement feedback loop (`scripts/impact.py`): register a change before deploying it,
+  import real GSC/GA4/CrUX data afterward, and get a deterministic, honesty-constrained verdict
+  (never a forecast, never a causal claim) via gate checks, a difference-in-differences effect
+  estimate, a placebo-window distribution, and automatic confounder flagging. See
+  `references/measurement-methodology.md` and `workflows/measure.md`.
+- `scripts/validate_claims.py`: scans `.claude/seo/` and generated reports for outcome language
+  ("increased traffic", "will rank", a bare "%" near clicks/traffic/rankings) that isn't backed by
+  an `impact/` result or evidence-ledger citation.
+- `scripts/live_data.py`: `import-gsc-zip` (parses the GSC UI's ZIP export and derives a real date
+  range from `Dates.csv`), `--start`/`--end`/`--label` on CSV imports, content-hash-addressed,
+  never-collide filenames under `.claude/seo/measurement/raw/` plus a `measurement/index.json`
+  catalog, and API keys sent via the `X-goog-api-key` header instead of a URL query parameter.
+- `scripts/seo_tools.py`: `snapshot --name` writes a non-overwritten, date+git-sha-named file
+  under `.claude/seo/snapshots/` (in addition to the existing overwritten `baseline.json`).
+- `scripts/score.py`: each check now reports `evidenceMix` (source-static/field-data/attested),
+  and the output includes an `unavailableChecks` list with a plain-language reason and how to
+  unlock each one.
+
 ### Fixed (second adversarial QA pass, re-attacking the fixes below)
 - `scripts/impact.py`: the reported direction (`increase`/`decrease`) was decided by a bare
   `effect>1` comparison, but "unusual" was decided by comparing against a band centered on the

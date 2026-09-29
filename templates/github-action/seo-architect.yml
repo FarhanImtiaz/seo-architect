@@ -1,0 +1,39 @@
+# Copy to .github/workflows/seo-architect.yml in the PROJECT being audited (not in this skill
+# package). Requires no secrets and no network access by default -- everything here is the same
+# static evidence `full_audit.py`/`score.py` already produce locally.
+#
+# Deliberately triggers on `pull_request`, never `pull_request_target` -- the latter runs with
+# the base repo's permissions/secrets against untrusted PR code, which this workflow has no need
+# for and should never be changed to use.
+name: SEO Architect CI check
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  seo-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # Adjust SKILL_DIR to wherever seo-architect is installed in this repo
+      # (e.g. .claude/skills/seo-architect for a project-local install).
+      - name: Run SEO Architect CI check
+        env:
+          SKILL_DIR: .claude/skills/seo-architect
+        run: |
+          python3 "$SKILL_DIR/scripts/ci_check.py" . \
+            --base-ref "origin/${{ github.base_ref }}" \
+            --summary-out "$GITHUB_STEP_SUMMARY" \
+            --sarif seo-architect-results.sarif
+      # Optional: upload SARIF to GitHub code scanning. Needs `security-events: write` added to
+      # `permissions:` above -- only add that if you actually want this step.
+      # - uses: github/codeql-action/upload-sarif@v3
+      #   with:
+      #     sarif_file: seo-architect-results.sarif

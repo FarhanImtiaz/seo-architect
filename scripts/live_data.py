@@ -158,6 +158,38 @@ def import_gsc_zip(root,zip_path,start,end,label):
     print(json.dumps({'tool':'live-data-import-gsc-zip','rowsImported':len(rows),'dateRange':date_range,'wrote':str(path)},indent=2))
     return 0
 
+def import_bing_ai(root,csv_path,start,end,label):
+    """Bing Webmaster Tools 'AI Performance' CSV export (citations, cited pages, grounding
+    queries). This is genuinely first-party data Bing reports -- not a composite/invented score."""
+    rows=[_normalize_row_keys(r) for r in _csv_rows(csv_path)]
+    if _rows_have_secret(rows):
+        print('ERROR: the CSV appears to contain a secret-like value; refusing to import.',file=sys.stderr); return 2
+    date_range=_date_range_arg(start,end)
+    note='Bing Webmaster Tools AI Performance CSV export; a point-in-time snapshot. Grounding queries may be sampled per Bing\'s own reporting.'
+    if not date_range: note+=' No date range was given (--start/--end); this import cannot be used for before/after measurement until one is known.'
+    path,_=_write(root,'bing-ai','csv-import',rows,date_range,note,label=label,method='ui-export-csv')
+    print(json.dumps({'tool':'live-data-import-bing-ai','rowsImported':len(rows),'dateRange':date_range,'wrote':str(path)},indent=2))
+    return 0
+
+AI_REFERRER_HOSTS=('chatgpt.com','perplexity.ai','copilot.microsoft.com','gemini.google.com','claude.ai')
+
+def import_ai_referrals(root,csv_path,start,end,label):
+    """GA4 referral-sessions export filtered to known AI-assistant referrer hosts. Caveat, always
+    included: many AI-assistant clicks arrive with no referrer at all (client-side navigation,
+    app webviews), so this systematically UNDERCOUNTS AI-driven traffic -- never treat a low
+    number here as "AI isn't sending traffic", only as "at least this much is referrer-visible"."""
+    rows=[_normalize_row_keys(r) for r in _csv_rows(csv_path)]
+    if _rows_have_secret(rows):
+        print('ERROR: the CSV appears to contain a secret-like value; refusing to import.',file=sys.stderr); return 2
+    matched=[r for r in rows if any(h in (r.get('source') or r.get('referrer') or '').lower() for h in AI_REFERRER_HOSTS)]
+    date_range=_date_range_arg(start,end)
+    note=('GA4 referral-sessions export, filtered to known AI-assistant referrer hosts ('+', '.join(AI_REFERRER_HOSTS)+'). '
+          'This systematically UNDERCOUNTS AI-driven traffic: many AI-assistant clicks arrive with no referrer at all.')
+    if not date_range: note+=' No date range was given (--start/--end); this import cannot be used for before/after measurement until one is known.'
+    path,_=_write(root,'ai-referrals','csv-import',matched,date_range,note,label=label,method='ui-export-csv')
+    print(json.dumps({'tool':'live-data-import-ai-referrals','rowsImported':len(matched),'rowsInSource':len(rows),'dateRange':date_range,'wrote':str(path)},indent=2))
+    return 0
+
 def psi(root,url):
     key=os.environ.get('PSI_API_KEY')
     api=f'https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={urllib.request.quote(url,safe="")}'
@@ -195,7 +227,7 @@ def crux(root,origin):
 def main():
     q=argparse.ArgumentParser()
     sub=q.add_subparsers(dest='action',required=True)
-    for name in ('import-gsc','import-ga4'):
+    for name in ('import-gsc','import-ga4','import-bing-ai','import-ai-referrals'):
         s=sub.add_parser(name); s.add_argument('project'); s.add_argument('csv_path'); s.add_argument('--start'); s.add_argument('--end'); s.add_argument('--label',choices=sorted(LABELS),default='site')
     s=sub.add_parser('import-gsc-zip'); s.add_argument('project'); s.add_argument('zip_path'); s.add_argument('--start'); s.add_argument('--end'); s.add_argument('--label',choices=sorted(LABELS),default='site')
     s=sub.add_parser('psi'); s.add_argument('project'); s.add_argument('url')
@@ -206,6 +238,8 @@ def main():
     if a.action=='import-gsc': return import_gsc(root,a.csv_path,a.start,a.end,a.label)
     if a.action=='import-ga4': return import_ga4(root,a.csv_path,a.start,a.end,a.label)
     if a.action=='import-gsc-zip': return import_gsc_zip(root,a.zip_path,a.start,a.end,a.label)
+    if a.action=='import-bing-ai': return import_bing_ai(root,a.csv_path,a.start,a.end,a.label)
+    if a.action=='import-ai-referrals': return import_ai_referrals(root,a.csv_path,a.start,a.end,a.label)
     if a.action=='psi': return psi(root,a.url)
     if a.action=='crux': return crux(root,a.origin)
 if __name__=='__main__': raise SystemExit(main())

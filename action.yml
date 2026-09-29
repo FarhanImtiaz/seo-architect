@@ -1,0 +1,25 @@
+name: "SEO Architect CI check"
+description: "Diffs a static SEO/AEO audit between a base ref and the current checkout; no network or secrets required by default."
+inputs:
+  base-ref:
+    description: "Git ref to compare against (e.g. origin/main)"
+    required: true
+  project-dir:
+    description: "Project directory to audit"
+    required: false
+    default: "."
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - id: run
+      shell: bash
+      run: |
+        python3 "${{ github.action_path }}/scripts/ci_check.py" "${{ inputs.project-dir }}" \
+          --base-ref "${{ inputs.base-ref }}" \
+          --summary-out "$GITHUB_STEP_SUMMARY" \
+          --sarif seo-architect-results.sarif
+# Usage: `uses: <owner>/seo-architect@<pinned-sha>` -- pin to a commit SHA, not a mutable tag,
+# since this action runs arbitrary Python against your checkout.

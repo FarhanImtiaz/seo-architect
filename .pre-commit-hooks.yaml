@@ -1,0 +1,10 @@
+- id: seo-architect-guard
+  name: SEO Architect fast staged-files check
+  description: >-
+    Deterministic checks only (JSON-LD parses, robots/sitemap well-formed, no route removed,
+    no noindex added) against staged files. No network. Not a substitute for the full CI check
+    in templates/github-action/seo-architect.yml, which compares against a real base ref.
+  entry: python3 scripts/ci_check.py . --base-ref HEAD
+  language: system
+  pass_filenames: false
+  stages: [pre-commit]
