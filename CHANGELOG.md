@@ -23,6 +23,26 @@ you bump the rubric, add a dated entry below that states the new rubric version 
   and `.pre-commit-hooks.yaml`.
 - `scripts/seo_tools.py`: `regression()`'s per-page comparison now also tracks `noindex`, flagging
   a page newly set to noindex since the baseline as HIGH (previously silent).
+- Site-wide technical depth: `scripts/scan_redirects.py` (redirect chains/loops/unresolved
+  targets from `next.config.*`, `vercel.json`, `netlify.toml`, `_redirects`, `.htaccess`, nginx
+  `.conf`; unparseable sources like Nuxt `routeRules` are reported `unavailable`, never silently
+  treated as "no redirects"); `scripts/scan_canonicals.py` (canonical graph: missing/host-mismatch/
+  chain/noindex-target, plus a shingle-overlap near-duplicate heuristic); `scripts/scan_freshness.py`
+  (flags a declared "updated"/`dateModified` date newer than the actual last significant git
+  change, skipping whitespace/year-only diffs; skipped entirely, with a note, outside a git repo);
+  `scripts/render_diff.py` (response-vs-rendered HTML diff for canonical/title/links/JSON-LD that
+  only exist after JavaScript runs; without `--rendered` it only checks for noindex-skips-rendering
+  and says so); `scripts/scan_logs.py` (user-supplied access logs only, never fetched -- a bot
+  user-agent is "ua-claimed" unless verified against a vendor's published IP ranges via `--ranges`;
+  IPs are truncated before any aggregate is written, raw logs are never persisted). `validate_sitemap`
+  (in `scripts/seo_tools.py`) now also checks lastmod format/future-dates/all-identical-lastmod,
+  demotes priority/changefreq to INFO ("Google ignores these"), checks the 50k-URL/50MB limits,
+  handles sitemap-index recursion, and checks for a robots.txt `Sitemap:` directive.
+  `redirects`/`canonicals`/`freshness` are registered in `full_audit.py`'s `TOOLS`, so their
+  findings appear in every audit; they don't yet feed `rubric.json`/`score.py` (that would need a
+  rubric version bump, deferred to keep this phase additive and non-breaking to existing scores).
+  `render_diff.py`/`scan_logs.py` need explicit input paths (real build output, a real log file) so
+  they're standalone tools, not part of the default audit, matching how `live_data.py` works.
 
 ### Fixed
 - `scripts/impact.py`: an independent adversarial QA pass found the evaluation pipeline could be

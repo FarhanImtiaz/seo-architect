@@ -2,7 +2,7 @@
 import json, subprocess, sys, tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-ROOT=Path(__file__).resolve().parents[1]; TOOLS=ROOT/'scripts/seo_tools.py'; INIT=ROOT/'scripts/init_state.py'; FIX=ROOT/'tests/fixtures/site'; HOOK=ROOT/'scripts/guardian_hook.py'; LEDGER=ROOT/'scripts/evidence_ledger.py'; CONTRACT=ROOT/'scripts/validate_page_contract.py'; FRAMEWORK=ROOT/'scripts/framework_inspect.py'; ADAPTERS=ROOT/'scripts/framework_adapters.py'; AEO=ROOT/'scripts/validate_aeo.py'; FULL=ROOT/'scripts/full_audit.py'; CLAUDE=ROOT/'scripts/validate_claude_skill.py'; SCORE=ROOT/'scripts/score.py'; VALSRC=ROOT/'scripts/validate_sources.py'; PATTERNMATCH=ROOT/'scripts/pattern_match.py'; LINKGRAPH=ROOT/'scripts/scan_link_graph.py'; IMAGES=ROOT/'scripts/scan_images.py'; METAEXTRACT=ROOT/'scripts/metadata_extract.py'; HREFLANG=ROOT/'scripts/validate_hreflang.py'; LIVEDATA=ROOT/'scripts/live_data.py'; CI=ROOT/'scripts/ci_check.py'
+ROOT=Path(__file__).resolve().parents[1]; TOOLS=ROOT/'scripts/seo_tools.py'; INIT=ROOT/'scripts/init_state.py'; FIX=ROOT/'tests/fixtures/site'; HOOK=ROOT/'scripts/guardian_hook.py'; LEDGER=ROOT/'scripts/evidence_ledger.py'; CONTRACT=ROOT/'scripts/validate_page_contract.py'; FRAMEWORK=ROOT/'scripts/framework_inspect.py'; ADAPTERS=ROOT/'scripts/framework_adapters.py'; AEO=ROOT/'scripts/validate_aeo.py'; FULL=ROOT/'scripts/full_audit.py'; CLAUDE=ROOT/'scripts/validate_claude_skill.py'; SCORE=ROOT/'scripts/score.py'; VALSRC=ROOT/'scripts/validate_sources.py'; PATTERNMATCH=ROOT/'scripts/pattern_match.py'; LINKGRAPH=ROOT/'scripts/scan_link_graph.py'; IMAGES=ROOT/'scripts/scan_images.py'; METAEXTRACT=ROOT/'scripts/metadata_extract.py'; HREFLANG=ROOT/'scripts/validate_hreflang.py'; LIVEDATA=ROOT/'scripts/live_data.py'; CI=ROOT/'scripts/ci_check.py'; REDIRECTS=ROOT/'scripts/scan_redirects.py'; CANONICALS=ROOT/'scripts/scan_canonicals.py'; FRESHNESS=ROOT/'scripts/scan_freshness.py'; RENDERDIFF=ROOT/'scripts/render_diff.py'; SCANLOGS=ROOT/'scripts/scan_logs.py'
 def run(*args, ok=(0,)):
  p=subprocess.run([sys.executable,*map(str,args)],capture_output=True,text=True)
  if p.returncode not in ok: raise AssertionError(f'{args}: {p.returncode}\n{p.stdout}\n{p.stderr}')
@@ -663,6 +663,108 @@ def ci_check_sarif_has_required_keys():
  run_=sarif['runs'][0]; assert run_['tool']['driver']['name']
  assert isinstance(run_['results'],list) and run_['results']
  assert run_['results'][0]['locations'][0]['physicalLocation']['artifactLocation']['uri']
+
+@test
+def scan_redirects_detects_chain_loop_and_unresolved_target():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td)
+  (p/'next.config.js').write_text("module.exports={async redirects(){return ["
+   "{source:'/old',destination:'/mid',permanent:true},"
+   "{source:'/mid',destination:'/new',permanent:true},"
+   "{source:'/loopA',destination:'/loopB',permanent:true},"
+   "{source:'/loopB',destination:'/loopA',permanent:true},"
+   "{source:'/dead',destination:'/nowhere',permanent:true}"
+   "]}}")
+  (p/'app/new').mkdir(parents=True); (p/'app/new/page.html').write_text('<html><title>x</title></html>')
+  (p/'app/page.html').write_text('<html><title>home</title></html>')
+  out=json.loads(run(REDIRECTS,p,ok=(0,1)))
+  issues=[f['issue'] for f in out['findings']]
+  assert any('chain of 2 hop' in i for i in issues), issues
+  assert any(f['severity']=='CRITICAL' and 'loop' in f['issue'].lower() for f in out['findings']), issues
+  assert any('does not resolve to a known route' in i for i in issues), issues
+
+@test
+def scan_canonicals_flags_noindex_canonical_and_near_duplicates():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td); (p/'app/a').mkdir(parents=True); (p/'app/b').mkdir(parents=True)
+  body='<html><head><title>Widget City Downtown</title><link rel="canonical" href="https://x.com/a"/>'\
+       '<meta name="robots" content="noindex"></head><body>'+' '.join(f'word{i}' for i in range(60))+'</body></html>'
+  (p/'app/a/page.html').write_text(body)
+  body_b=body.replace('href="https://x.com/a"','href="https://x.com/b"').replace('Downtown','Uptown')
+  (p/'app/b/page.html').write_text(body_b)
+  out=json.loads(run(CANONICALS,p,ok=(0,1)))
+  rules={f['rule'] for f in out['findings'] if 'rule' in f}
+  assert 'canonical-on-noindex' in rules, out['findings']
+  assert 'near-duplicate-heuristic' in rules, out['findings']
+
+@test
+def scan_freshness_flags_declared_date_newer_than_last_real_change():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td)
+  subprocess.run(['git','init','-q'],cwd=p,check=True)
+  subprocess.run(['git','config','user.email','t@example.com'],cwd=p,check=True)
+  subprocess.run(['git','config','user.name','t'],cwd=p,check=True)
+  (p/'app/a').mkdir(parents=True)
+  f=p/'app/a/page.html'
+  f.write_text('<html><head><title>A</title></head><body>real content here, first version</body></html>')
+  subprocess.run(['git','add','-A'],cwd=p,check=True)
+  env={'GIT_AUTHOR_DATE':'2024-01-01T00:00:00','GIT_COMMITTER_DATE':'2024-01-01T00:00:00'}
+  import os; full_env=dict(os.environ); full_env.update(env)
+  subprocess.run(['git','commit','-q','-m','initial'],cwd=p,check=True,env=full_env)
+  # a second, trivial (whitespace-only) commit must NOT count as the "last significant change"
+  f.write_text(f.read_text()+'  ')
+  subprocess.run(['git','add','-A'],cwd=p,check=True)
+  env2=dict(full_env); env2['GIT_AUTHOR_DATE']='2024-06-01T00:00:00'; env2['GIT_COMMITTER_DATE']='2024-06-01T00:00:00'
+  subprocess.run(['git','commit','-q','-m','whitespace only'],cwd=p,check=True,env=env2)
+  # now claim a much later "updated" date than any real content change
+  f.write_text(f.read_text()+'<meta itemprop="dateModified" content="2026-01-01">'.replace('  <meta','<meta'))
+  # rewrite with the dateModified actually embedded in a parseable spot
+  f.write_text('<html><head><title>A</title><script type="application/ld+json">{"dateModified":"2026-01-01"}</script></head><body>real content here, first version</body></html>')
+  out=json.loads(run(FRESHNESS,p,ok=(0,1)))
+  assert any(f_['rule']=='freshness-date-mismatch' for f_ in out['findings']), out
+
+@test
+def render_diff_flags_canonical_title_and_render_only_links():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td); (p/'response').mkdir(); (p/'rendered').mkdir()
+  (p/'response/a.html').write_text('<html><head><title>A</title><link rel="canonical" href="https://x.com/a"/></head><body>hi</body></html>')
+  (p/'rendered/a.html').write_text('<html><head><title>A - r</title><link rel="canonical" href="https://x.com/a-r"/></head><body>hi <a href="/extra">e</a></body></html>')
+  out=json.loads(run(RENDERDIFF,'--response',p/'response','--rendered',p/'rendered',ok=(0,1)))
+  issues=' '.join(f['issue'] for f in out['findings'])
+  assert 'Canonical differs' in issues and 'Title differs' in issues and 'exist only after rendering' in issues, out
+
+@test
+def render_diff_without_rendered_only_flags_noindex_and_says_so():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td); (p/'response').mkdir()
+  (p/'response/a.html').write_text('<html><head><meta name="robots" content="noindex"></head><body>hi</body></html>')
+  out=json.loads(run(RENDERDIFF,'--response',p/'response',ok=(0,)))
+  assert any(f['severity']=='INFO' and 'noindex' in f['issue'].lower() for f in out['findings']), out
+  assert any('No --rendered input given' in n for n in out['notes']), out
+
+@test
+def scan_logs_spoofed_googlebot_is_unverified_real_one_is_verified():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td); log=p/'access.log'
+  log.write_text('\n'.join([
+   '66.249.66.1 - - [01/Jan/2026:00:00:00 +0000] "GET /a HTTP/1.1" 200 512 "-" "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"',
+   '1.2.3.4 - - [01/Jan/2026:00:00:01 +0000] "GET /b HTTP/1.1" 200 512 "-" "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"',
+   '203.0.113.5 - - [01/Jan/2026:00:00:02 +0000] "GET /c?utm=1 HTTP/1.1" 404 0 "-" "GPTBot/1.0"',
+  ]))
+  ranges=p/'ranges.json'; ranges.write_text(json.dumps({'prefixes':[{'ipv4Prefix':'66.249.64.0/19'}]}))
+  out=json.loads(run(SCANLOGS,log,'--ranges',ranges,ok=(0,1)))
+  gb=out['summary']['byBotStatus']['Googlebot']
+  assert gb.get('200:verified')==1 and gb.get('200:unverified')==1, gb
+  assert out['summary']['topParamUrls']==[['/c?utm=1',1]], out['summary']['topParamUrls']
+  assert out['summary']['top404s']==[['/c',1]], out['summary']['top404s']
+
+@test
+def scan_logs_never_persists_a_raw_ip():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td); log=p/'access.log'
+  log.write_text('203.0.113.77 - - [01/Jan/2026:00:00:00 +0000] "GET /a HTTP/1.1" 200 512 "-" "GPTBot/1.0"')
+  out=run(SCANLOGS,log,ok=(0,1))
+  assert '203.0.113.77' not in out, 'a raw, untruncated IP must never appear in scan_logs.py output'
 
 def main():
  failures=[]

@@ -92,6 +92,9 @@ python3 /path/to/seo-architect/scripts/live_data.py import-gsc . <csv>   # only 
 python3 /path/to/seo-architect/scripts/impact.py mark . --id <id> ...     # register a change BEFORE deploying it (see workflows/measure.md)
 python3 /path/to/seo-architect/scripts/impact.py evaluate . <id>          # only after real time and real imported data exist
 python3 /path/to/seo-architect/scripts/validate_claims.py .               # advisory scan for unbacked outcome language in .claude/seo/
+python3 /path/to/seo-architect/scripts/ci_check.py . --base-ref <ref>     # PR/CI-time regression check; see workflows/ci.md
+python3 /path/to/seo-architect/scripts/render_diff.py --response <dir> --rendered <dir>  # only with real build output and, optionally, a real rendered DOM dump
+python3 /path/to/seo-architect/scripts/scan_logs.py <access.log> --ranges <ranges.json>  # only with a real, user-supplied log file -- never fetched
 ```
 
 Read [references/seo-principles.md](references/seo-principles.md) for shared quality rules, then only the relevant one-hop reference for technical work, content, IA, links, schema, AEO, local/ecommerce, images, performance, research, migration, measurement, or international/hreflang. Read [references/scoring-rubric.md](references/scoring-rubric.md) before reporting a category score, [references/winning-patterns.md](references/winning-patterns.md) plus [references/sources.json](references/sources.json) before citing a documented growth pattern, and [references/measurement-methodology.md](references/measurement-methodology.md) before running or reporting an `impact.py evaluate` result. Use templates in `templates/` when creating state or reports.
