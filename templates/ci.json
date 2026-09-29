@@ -1,0 +1,12 @@
+{
+  "failOn": ["new-critical", "new-high", "route-removed-without-redirect", "noindex-added", "robots-disallow-all"],
+  "scoreDropTolerance": 5,
+  "ignore": [
+    {
+      "fingerprint": "tool|severity|issue text|file path (from a ci_check.py run's newFindings entries)",
+      "reason": "why this is accepted, not a real regression",
+      "expires": "2026-12-31"
+    }
+  ],
+  "builtDir": null
+}

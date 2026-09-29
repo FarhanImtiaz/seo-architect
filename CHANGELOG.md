@@ -10,6 +10,20 @@ you bump the rubric, add a dated entry below that states the new rubric version 
 
 ## [Unreleased]
 
+### Added
+- `scripts/ci_check.py`: PR/CI-time SEO regression check. Runs `full_audit.py --score` on a base
+  ref (via `git archive`, no working-tree checkout needed) and on the current project inside
+  disposable scratch copies (it never mutates either directory's real `.claude/seo/baseline.json`
+  as a side effect of being run), diffs findings by a stable fingerprint, and reports new/resolved
+  findings, removed routes without a matching redirect, and a score delta — or "not comparable" if
+  the rubric version changed between base and head. Outputs JSON, a Markdown step summary, GitHub
+  annotations, and optional SARIF. No network or secrets required by default. See
+  `workflows/ci.md`, `templates/ci.json`, `templates/github-action/seo-architect.yml`, `action.yml`
+  (a pin-by-SHA composite action; triggers on `pull_request` only, never `pull_request_target`),
+  and `.pre-commit-hooks.yaml`.
+- `scripts/seo_tools.py`: `regression()`'s per-page comparison now also tracks `noindex`, flagging
+  a page newly set to noindex since the baseline as HIGH (previously silent).
+
 ### Fixed
 - `scripts/impact.py`: an independent adversarial QA pass found the evaluation pipeline could be
   pushed into a false directional verdict by realistic, non-adversarial situations. Fixed:

@@ -2,7 +2,7 @@
 import json, subprocess, sys, tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-ROOT=Path(__file__).resolve().parents[1]; TOOLS=ROOT/'scripts/seo_tools.py'; INIT=ROOT/'scripts/init_state.py'; FIX=ROOT/'tests/fixtures/site'; HOOK=ROOT/'scripts/guardian_hook.py'; LEDGER=ROOT/'scripts/evidence_ledger.py'; CONTRACT=ROOT/'scripts/validate_page_contract.py'; FRAMEWORK=ROOT/'scripts/framework_inspect.py'; ADAPTERS=ROOT/'scripts/framework_adapters.py'; AEO=ROOT/'scripts/validate_aeo.py'; FULL=ROOT/'scripts/full_audit.py'; CLAUDE=ROOT/'scripts/validate_claude_skill.py'; SCORE=ROOT/'scripts/score.py'; VALSRC=ROOT/'scripts/validate_sources.py'; PATTERNMATCH=ROOT/'scripts/pattern_match.py'; LINKGRAPH=ROOT/'scripts/scan_link_graph.py'; IMAGES=ROOT/'scripts/scan_images.py'; METAEXTRACT=ROOT/'scripts/metadata_extract.py'; HREFLANG=ROOT/'scripts/validate_hreflang.py'; LIVEDATA=ROOT/'scripts/live_data.py'
+ROOT=Path(__file__).resolve().parents[1]; TOOLS=ROOT/'scripts/seo_tools.py'; INIT=ROOT/'scripts/init_state.py'; FIX=ROOT/'tests/fixtures/site'; HOOK=ROOT/'scripts/guardian_hook.py'; LEDGER=ROOT/'scripts/evidence_ledger.py'; CONTRACT=ROOT/'scripts/validate_page_contract.py'; FRAMEWORK=ROOT/'scripts/framework_inspect.py'; ADAPTERS=ROOT/'scripts/framework_adapters.py'; AEO=ROOT/'scripts/validate_aeo.py'; FULL=ROOT/'scripts/full_audit.py'; CLAUDE=ROOT/'scripts/validate_claude_skill.py'; SCORE=ROOT/'scripts/score.py'; VALSRC=ROOT/'scripts/validate_sources.py'; PATTERNMATCH=ROOT/'scripts/pattern_match.py'; LINKGRAPH=ROOT/'scripts/scan_link_graph.py'; IMAGES=ROOT/'scripts/scan_images.py'; METAEXTRACT=ROOT/'scripts/metadata_extract.py'; HREFLANG=ROOT/'scripts/validate_hreflang.py'; LIVEDATA=ROOT/'scripts/live_data.py'; CI=ROOT/'scripts/ci_check.py'
 def run(*args, ok=(0,)):
  p=subprocess.run([sys.executable,*map(str,args)],capture_output=True,text=True)
  if p.returncode not in ok: raise AssertionError(f'{args}: {p.returncode}\n{p.stdout}\n{p.stderr}')
@@ -606,6 +606,63 @@ def impact_empty_control_window_yields_insufficient_data():
  run(IMPACT,'import',p,'h3',cf,'--label','control',ok=(0,))
  out=json.loads(run(IMPACT,'evaluate',p,'h3','--allow-synthetic','--as-of','2026-02-09',ok=(0,)))
  assert out['verdict']=='insufficient-data', f'an empty control window must never be reported as a confident no-detectable-change: {out}'
+
+EX=ROOT/'examples/worked-example-nextjs'
+import shutil
+def _ci_pair():
+ # full_audit.py --score (which ci_check.py runs on both sides) writes .claude/seo/baseline.json
+ # into whatever directory it's pointed at -- copy the committed fixtures to a scratch dir first
+ # so these tests never mutate examples/worked-example-nextjs in place (that corrupted the golden
+ # `worked_example_before_after_matches_golden_summary` fixture during development of this test).
+ td=Path(tempfile.mkdtemp()); before=td/'before'; after=td/'after'
+ shutil.copytree(EX/'before',before); shutil.copytree(EX/'after',after)
+ return before,after
+
+@test
+def ci_check_worked_example_before_to_after_has_no_new_findings_and_passes():
+ before,after=_ci_pair()
+ out=json.loads(run(CI,after,'--base-dir',before,ok=(0,)))
+ assert out['diff']['newFindings']==[], f'fixing the issues must not introduce new findings: {out["diff"]["newFindings"]}'
+ assert out['triggers']==[], f'an improving diff must not trigger any failOn rule: {out}'
+ assert out['diff']['scoreDelta']>0, f'the after fixture should score higher than before: {out["diff"]["scoreDelta"]}'
+
+@test
+def ci_check_worked_example_after_to_before_is_a_regression_and_fails():
+ before,after=_ci_pair()
+ p=subprocess.run([sys.executable,str(CI),str(before),'--base-dir',str(after)],capture_output=True,text=True)
+ assert p.returncode==1, f'reintroducing the before-fixture issues must fail the CI check: {p.stdout}{p.stderr}'
+ dec=json.JSONDecoder(); out,_=dec.raw_decode(p.stdout)
+ assert 'new-high' in out['triggers'], f'the reintroduced HIGH jsonld finding must trigger new-high: {out}'
+ assert len(out['diff']['newFindings'])>0
+
+@test
+def ci_check_expired_ignore_still_fails_the_build():
+ before,after=_ci_pair()
+ # find one real new-finding fingerprint by running the regression comparison once, unfiltered
+ raw=run(CI,before,'--base-dir',after,ok=(0,1))
+ dec=json.JSONDecoder(); first,_=dec.raw_decode(raw)
+ assert first['diff']['newFindings'], 'need at least one real new finding to build this fixture'
+ f=first['diff']['newFindings'][0]
+ fp='|'.join([f['tool'],str(f.get('severity','')),(f.get('issue') or '').strip(),(f.get('file') or '').strip()])
+ cfg={'failOn':['new-critical','new-high'],'ignore':[{'fingerprint':fp,'reason':'test','expires':'2000-01-01'}]}
+ # ci_check.py reads .claude/seo/ci.json relative to the PROJECT dir (the head), which here is `before`
+ ci_json=before/'.claude/seo/ci.json'; ci_json.parent.mkdir(parents=True,exist_ok=True)
+ ci_json.write_text(json.dumps(cfg))
+ out2=subprocess.run([sys.executable,str(CI),str(before),'--base-dir',str(after)],capture_output=True,text=True)
+ assert out2.returncode==1, 'an EXPIRED ignore must not suppress the finding -- the build must still fail'
+ parsed,_=dec.raw_decode(out2.stdout)
+ assert parsed['expiredIgnores'], f'the expired ignore must be reported, not silently dropped: {parsed}'
+
+@test
+def ci_check_sarif_has_required_keys():
+ before,after=_ci_pair()
+ out_path=before/'r.sarif'
+ run(CI,before,'--base-dir',after,'--sarif',out_path,ok=(0,1))
+ sarif=json.loads(out_path.read_text())
+ assert sarif['version']=='2.1.0'
+ run_=sarif['runs'][0]; assert run_['tool']['driver']['name']
+ assert isinstance(run_['results'],list) and run_['results']
+ assert run_['results'][0]['locations'][0]['physicalLocation']['artifactLocation']['uri']
 
 def main():
  failures=[]

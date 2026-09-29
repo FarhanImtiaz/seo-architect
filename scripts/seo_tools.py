@@ -285,8 +285,11 @@ def regression(root):
     for prior in old.get('pages',[]):
         now=current.get(prior['source'])
         if not now: continue
-        for key in ('title','description','canonical','h1Count','jsonldTypes'):
-            if prior.get(key)!=now.get(key): fs.append({'severity':'MEDIUM','issue':f'Page SEO property changed: {key}','file':prior['source'],'before':prior.get(key),'after':now.get(key),'action':'Review intent, visible content, and migration record if applicable.'})
+        for key in ('title','description','canonical','h1Count','jsonldTypes','noindex'):
+            if prior.get(key)!=now.get(key):
+                severity='HIGH' if key=='noindex' and now.get(key) and not prior.get(key) else 'MEDIUM'
+                issue=f'Page newly set to noindex since baseline.' if key=='noindex' and now.get(key) and not prior.get(key) else f'Page SEO property changed: {key}'
+                fs.append({'severity':severity,'issue':issue,'file':prior['source'],'before':prior.get(key),'after':now.get(key),'action':'Review intent, visible content, and migration record if applicable.'})
     return emit('seo-regression',fs,['Comparison is static and conservative; inspect intended route changes and runtime-generated assets.'])
 def main():
     if len(sys.argv)<3: print('Usage: seo_tools.py <routes|metadata|sitemap|robots|jsonld|links|graph|images|snapshot|compare> <project> [--name LABEL]');return 2
