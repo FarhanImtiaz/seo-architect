@@ -43,6 +43,15 @@ you bump the rubric, add a dated entry below that states the new rubric version 
   rubric version bump, deferred to keep this phase additive and non-breaking to existing scores).
   `render_diff.py`/`scan_logs.py` need explicit input paths (real build output, a real log file) so
   they're standalone tools, not part of the default audit, matching how `live_data.py` works.
+- Platform adapters for non-framework-code projects: `scripts/platform_detect.py` orchestrates
+  `scripts/platforms/{ssg_frontmatter,headless_cms,webflow,shopify,wordpress}.py`. Each reports a
+  real, checked `unavailable[]` list for content it cannot statically see (a headless CMS's actual
+  entries, Webflow CMS Collection pages, Shopify's DB-owned catalog/sitemap, WordPress content
+  usually owned by an SEO plugin) rather than silently guessing it's fine — `score.py` lowers
+  `coveragePct` for those, matching the framework-code adapters' honesty model. See
+  `references/platform-coverage.md` for the full per-platform matrix. Registered in
+  `full_audit.py`'s `TOOLS` as `platforms`; not yet wired into `rubric.json` (additive, same
+  reasoning as Phase 11's new tools).
 
 ### Fixed
 - `scripts/impact.py`: an independent adversarial QA pass found the evaluation pipeline could be

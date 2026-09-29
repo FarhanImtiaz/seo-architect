@@ -2,7 +2,7 @@
 import json, subprocess, sys, tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-ROOT=Path(__file__).resolve().parents[1]; TOOLS=ROOT/'scripts/seo_tools.py'; INIT=ROOT/'scripts/init_state.py'; FIX=ROOT/'tests/fixtures/site'; HOOK=ROOT/'scripts/guardian_hook.py'; LEDGER=ROOT/'scripts/evidence_ledger.py'; CONTRACT=ROOT/'scripts/validate_page_contract.py'; FRAMEWORK=ROOT/'scripts/framework_inspect.py'; ADAPTERS=ROOT/'scripts/framework_adapters.py'; AEO=ROOT/'scripts/validate_aeo.py'; FULL=ROOT/'scripts/full_audit.py'; CLAUDE=ROOT/'scripts/validate_claude_skill.py'; SCORE=ROOT/'scripts/score.py'; VALSRC=ROOT/'scripts/validate_sources.py'; PATTERNMATCH=ROOT/'scripts/pattern_match.py'; LINKGRAPH=ROOT/'scripts/scan_link_graph.py'; IMAGES=ROOT/'scripts/scan_images.py'; METAEXTRACT=ROOT/'scripts/metadata_extract.py'; HREFLANG=ROOT/'scripts/validate_hreflang.py'; LIVEDATA=ROOT/'scripts/live_data.py'; CI=ROOT/'scripts/ci_check.py'; REDIRECTS=ROOT/'scripts/scan_redirects.py'; CANONICALS=ROOT/'scripts/scan_canonicals.py'; FRESHNESS=ROOT/'scripts/scan_freshness.py'; RENDERDIFF=ROOT/'scripts/render_diff.py'; SCANLOGS=ROOT/'scripts/scan_logs.py'
+ROOT=Path(__file__).resolve().parents[1]; TOOLS=ROOT/'scripts/seo_tools.py'; INIT=ROOT/'scripts/init_state.py'; FIX=ROOT/'tests/fixtures/site'; HOOK=ROOT/'scripts/guardian_hook.py'; LEDGER=ROOT/'scripts/evidence_ledger.py'; CONTRACT=ROOT/'scripts/validate_page_contract.py'; FRAMEWORK=ROOT/'scripts/framework_inspect.py'; ADAPTERS=ROOT/'scripts/framework_adapters.py'; AEO=ROOT/'scripts/validate_aeo.py'; FULL=ROOT/'scripts/full_audit.py'; CLAUDE=ROOT/'scripts/validate_claude_skill.py'; SCORE=ROOT/'scripts/score.py'; VALSRC=ROOT/'scripts/validate_sources.py'; PATTERNMATCH=ROOT/'scripts/pattern_match.py'; LINKGRAPH=ROOT/'scripts/scan_link_graph.py'; IMAGES=ROOT/'scripts/scan_images.py'; METAEXTRACT=ROOT/'scripts/metadata_extract.py'; HREFLANG=ROOT/'scripts/validate_hreflang.py'; LIVEDATA=ROOT/'scripts/live_data.py'; CI=ROOT/'scripts/ci_check.py'; REDIRECTS=ROOT/'scripts/scan_redirects.py'; CANONICALS=ROOT/'scripts/scan_canonicals.py'; FRESHNESS=ROOT/'scripts/scan_freshness.py'; RENDERDIFF=ROOT/'scripts/render_diff.py'; SCANLOGS=ROOT/'scripts/scan_logs.py'; PLATFORMS=ROOT/'scripts/platform_detect.py'; PLATFORMFIX=ROOT/'tests/fixtures/platforms'
 def run(*args, ok=(0,)):
  p=subprocess.run([sys.executable,*map(str,args)],capture_output=True,text=True)
  if p.returncode not in ok: raise AssertionError(f'{args}: {p.returncode}\n{p.stdout}\n{p.stderr}')
@@ -765,6 +765,53 @@ def scan_logs_never_persists_a_raw_ip():
   log.write_text('203.0.113.77 - - [01/Jan/2026:00:00:00 +0000] "GET /a HTTP/1.1" 200 512 "-" "GPTBot/1.0"')
   out=run(SCANLOGS,log,ok=(0,1))
   assert '203.0.113.77' not in out, 'a raw, untruncated IP must never appear in scan_logs.py output'
+
+@test
+def platform_detect_ssg_frontmatter_flags_draft_in_sitemap_and_no_desc():
+ out=json.loads(run(PLATFORMS,PLATFORMFIX/'ssg-frontmatter',ok=(0,1)))
+ assert 'ssg-frontmatter' in out['detected']
+ issues=[f['issue'] for f in out['platforms']['ssg-frontmatter']['findings']]
+ assert any('draft:true' in i and 'sitemap' in i for i in issues), issues
+ assert out['platforms']['ssg-frontmatter']['unavailable']==[]
+
+@test
+def platform_detect_wordpress_flags_missing_wp_head_and_reports_unavailable():
+ out=json.loads(run(PLATFORMS,PLATFORMFIX/'wordpress',ok=(0,1)))
+ assert 'wordpress' in out['detected']
+ wp=out['platforms']['wordpress']
+ assert any('wp_head()' in f['issue'] for f in wp['findings']), wp['findings']
+ assert wp['unavailable'], 'WordPress adapter must report what it cannot see (plugin-owned SEO data), not stay silent about it'
+
+@test
+def platform_detect_shopify_flags_missing_theme_tags_and_reports_unavailable():
+ out=json.loads(run(PLATFORMS,PLATFORMFIX/'shopify',ok=(0,)))
+ assert 'shopify' in out['detected']
+ sp=out['platforms']['shopify']
+ assert any('canonical_url' in f['issue'] for f in sp['findings']), sp['findings']
+ assert sp['unavailable']
+
+@test
+def platform_detect_webflow_flags_missing_title_and_reports_cms_collections_unavailable():
+ out=json.loads(run(PLATFORMS,PLATFORMFIX/'webflow',ok=(0,)))
+ assert 'webflow' in out['detected']
+ wf=out['platforms']['webflow']
+ assert any('no title' in f['issue'].lower() for f in wf['findings']), wf['findings']
+ assert wf['unavailable']
+
+@test
+def platform_detect_headless_cms_flags_missing_slug_and_reports_unavailable():
+ out=json.loads(run(PLATFORMS,PLATFORMFIX/'headless-cms',ok=(0,1)))
+ assert 'headless-cms' in out['detected']
+ hc=out['platforms']['headless-cms']
+ assert any('slug field' in f['issue'] for f in hc['findings']), hc['findings']
+ assert hc['unavailable']
+
+@test
+def platform_detect_finds_nothing_on_a_plain_nextjs_project():
+ with tempfile.TemporaryDirectory() as td:
+  before=Path(td)/'before'; import shutil as _sh; _sh.copytree(EX/'before',before)
+  out=json.loads(run(PLATFORMS,before,ok=(0,)))
+  assert out['detected']==[], out['detected']
 
 def main():
  failures=[]
