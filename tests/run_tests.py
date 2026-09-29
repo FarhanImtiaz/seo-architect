@@ -2,7 +2,7 @@
 import json, subprocess, sys, tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-ROOT=Path(__file__).resolve().parents[1]; TOOLS=ROOT/'scripts/seo_tools.py'; INIT=ROOT/'scripts/init_state.py'; FIX=ROOT/'tests/fixtures/site'; HOOK=ROOT/'scripts/guardian_hook.py'; LEDGER=ROOT/'scripts/evidence_ledger.py'; CONTRACT=ROOT/'scripts/validate_page_contract.py'; FRAMEWORK=ROOT/'scripts/framework_inspect.py'; ADAPTERS=ROOT/'scripts/framework_adapters.py'; AEO=ROOT/'scripts/validate_aeo.py'; FULL=ROOT/'scripts/full_audit.py'; CLAUDE=ROOT/'scripts/validate_claude_skill.py'; SCORE=ROOT/'scripts/score.py'; VALSRC=ROOT/'scripts/validate_sources.py'; PATTERNMATCH=ROOT/'scripts/pattern_match.py'; LINKGRAPH=ROOT/'scripts/scan_link_graph.py'; IMAGES=ROOT/'scripts/scan_images.py'; METAEXTRACT=ROOT/'scripts/metadata_extract.py'; HREFLANG=ROOT/'scripts/validate_hreflang.py'; LIVEDATA=ROOT/'scripts/live_data.py'; CI=ROOT/'scripts/ci_check.py'; REDIRECTS=ROOT/'scripts/scan_redirects.py'; CANONICALS=ROOT/'scripts/scan_canonicals.py'; FRESHNESS=ROOT/'scripts/scan_freshness.py'; RENDERDIFF=ROOT/'scripts/render_diff.py'; SCANLOGS=ROOT/'scripts/scan_logs.py'; PLATFORMS=ROOT/'scripts/platform_detect.py'; PLATFORMFIX=ROOT/'tests/fixtures/platforms'
+ROOT=Path(__file__).resolve().parents[1]; TOOLS=ROOT/'scripts/seo_tools.py'; INIT=ROOT/'scripts/init_state.py'; FIX=ROOT/'tests/fixtures/site'; HOOK=ROOT/'scripts/guardian_hook.py'; LEDGER=ROOT/'scripts/evidence_ledger.py'; CONTRACT=ROOT/'scripts/validate_page_contract.py'; FRAMEWORK=ROOT/'scripts/framework_inspect.py'; ADAPTERS=ROOT/'scripts/framework_adapters.py'; AEO=ROOT/'scripts/validate_aeo.py'; FULL=ROOT/'scripts/full_audit.py'; CLAUDE=ROOT/'scripts/validate_claude_skill.py'; SCORE=ROOT/'scripts/score.py'; VALSRC=ROOT/'scripts/validate_sources.py'; PATTERNMATCH=ROOT/'scripts/pattern_match.py'; LINKGRAPH=ROOT/'scripts/scan_link_graph.py'; IMAGES=ROOT/'scripts/scan_images.py'; METAEXTRACT=ROOT/'scripts/metadata_extract.py'; HREFLANG=ROOT/'scripts/validate_hreflang.py'; LIVEDATA=ROOT/'scripts/live_data.py'; CI=ROOT/'scripts/ci_check.py'; REDIRECTS=ROOT/'scripts/scan_redirects.py'; CANONICALS=ROOT/'scripts/scan_canonicals.py'; FRESHNESS=ROOT/'scripts/scan_freshness.py'; RENDERDIFF=ROOT/'scripts/render_diff.py'; SCANLOGS=ROOT/'scripts/scan_logs.py'; PLATFORMS=ROOT/'scripts/platform_detect.py'; PLATFORMFIX=ROOT/'tests/fixtures/platforms'; AIACCESS=ROOT/'scripts/validate_ai_access.py'; COMPETITOR=ROOT/'scripts/competitor_diff.py'
 def run(*args, ok=(0,)):
  p=subprocess.run([sys.executable,*map(str,args)],capture_output=True,text=True)
  if p.returncode not in ok: raise AssertionError(f'{args}: {p.returncode}\n{p.stdout}\n{p.stderr}')
@@ -812,6 +812,51 @@ def platform_detect_finds_nothing_on_a_plain_nextjs_project():
   before=Path(td)/'before'; import shutil as _sh; _sh.copytree(EX/'before',before)
   out=json.loads(run(PLATFORMS,before,ok=(0,)))
   assert out['detected']==[], out['detected']
+
+@test
+def validate_ai_access_respects_bot_specific_group_over_wildcard():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td)
+  (p/'robots.txt').write_text('User-agent: GPTBot\nDisallow: /\n\nUser-agent: *\nAllow: /\n')
+  out=json.loads(run(AIACCESS,p,ok=(0,)))
+  assert out['accessMatrix']['GPTBot']['blocked'] is True, out['accessMatrix']['GPTBot']
+  assert out['accessMatrix']['ClaudeBot']['blocked'] is False, out['accessMatrix']['ClaudeBot']
+  assert any('GPTBot' in f['issue'] for f in out['findings'])
+  # never a recommendation to allow/block, only a report of the current policy and its documented
+  # consequence (the tool's own disclaimer text legitimately contains "recommends", so check for
+  # actual advisory phrasing rather than the bare substring)
+  full=json.dumps(out).lower()
+  assert 'you should' not in full and 'we recommend' not in full
+
+@test
+def competitor_diff_ssrf_guard_blocks_loopback_and_never_stores_body_text():
+ out=json.loads(run(COMPETITOR,'http://127.0.0.1/internal',ok=(0,)))
+ assert out['errors'] and out['errors'][0].get('blocked') is True, out['errors']
+ assert out['competitors']==[]
+
+@test
+def competitor_diff_from_file_reports_structure_not_body_text():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td)/'c.html'
+  secret='xyzzy-secret-competitor-copy-do-not-leak'
+  p.write_text(f'<html><head><title>Competitor Title</title></head><body><h1>H</h1>{secret} one two three four five six</body></html>')
+  out=run(COMPETITOR,'--from-file',f'https://comp.example/x={p}',ok=(0,))
+  assert secret not in out, 'competitor body text must never appear in the tool output'
+  parsed=json.loads(out)
+  assert parsed['competitors'][0]['titleLength']==len('Competitor Title')
+  assert parsed['competitors'][0]['wordCount']>0
+  full=parsed.copy(); full_text=json.dumps(full).lower()
+  assert 'why they rank' not in full_text and 'will rank' not in full_text
+
+@test
+def live_data_import_ai_referrals_filters_to_known_ai_hosts_and_flags_undercount():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td); run(INIT,'--project',p)
+  csv=p/'ref.csv'; csv.write_text('date,source,sessions\n2026-01-01,chatgpt.com,12\n2026-01-01,google.com,500\n2026-01-02,perplexity.ai,3\n')
+  out=json.loads(run(LIVEDATA,'import-ai-referrals',p,csv,'--start','2026-01-01','--end','2026-01-02',ok=(0,)))
+  assert out['rowsImported']==2 and out['rowsInSource']==3, out
+  written=json.loads(Path(out['wrote']).read_text())
+  assert 'UNDERCOUNTS' in written['limits']
 
 def main():
  failures=[]

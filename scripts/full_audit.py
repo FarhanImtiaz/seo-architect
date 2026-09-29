@@ -3,7 +3,7 @@
 import argparse,json,subprocess,sys
 from pathlib import Path
 HERE=Path(__file__).resolve().parent
-TOOLS={'framework':'framework_inspect.py','frameworkAdapters':'framework_adapters.py','routes':'scan_routes.py','metadata':'scan_metadata.py','metadataExtract':'metadata_extract.py','sitemap':'validate_sitemap.py','robots':'validate_robots.py','jsonld':'validate_jsonld.py','links':'scan_links.py','graph':'scan_link_graph.py','images':'scan_images.py','hreflang':'validate_hreflang.py','redirects':'scan_redirects.py','canonicals':'scan_canonicals.py','freshness':'scan_freshness.py','platforms':'platform_detect.py','aeo':'validate_aeo.py','evidence':'evidence_ledger.py','regression':'seo_regression.py'}
+TOOLS={'framework':'framework_inspect.py','frameworkAdapters':'framework_adapters.py','routes':'scan_routes.py','metadata':'scan_metadata.py','metadataExtract':'metadata_extract.py','sitemap':'validate_sitemap.py','robots':'validate_robots.py','jsonld':'validate_jsonld.py','links':'scan_links.py','graph':'scan_link_graph.py','images':'scan_images.py','hreflang':'validate_hreflang.py','redirects':'scan_redirects.py','canonicals':'scan_canonicals.py','freshness':'scan_freshness.py','platforms':'platform_detect.py','aiAccess':'validate_ai_access.py','aeo':'validate_aeo.py','evidence':'evidence_ledger.py','regression':'seo_regression.py'}
 def invoke(script,args):
  p=subprocess.run([sys.executable,str(HERE/script),*map(str,args)],text=True,capture_output=True)
  try: body=json.loads(p.stdout)

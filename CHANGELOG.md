@@ -52,6 +52,23 @@ you bump the rubric, add a dated entry below that states the new rubric version 
   `references/platform-coverage.md` for the full per-platform matrix. Registered in
   `full_audit.py`'s `TOOLS` as `platforms`; not yet wired into `rubric.json` (additive, same
   reasoning as Phase 11's new tools).
+- AEO access/eligibility, citation imports, competitor structural diff: `scripts/validate_ai_access.py`
+  parses robots.txt with real per-group precedence (a bot-specific group correctly wins over a
+  wildcard group, not just "does the token appear anywhere"), reports each named AI crawler's
+  current access and the DOCUMENTED consequence of blocking it per that vendor's own crawler
+  docs -- it never recommends allowing or blocking one, since that's the site owner's decision.
+  `scripts/live_data.py` gained `import-bing-ai` (Bing Webmaster Tools AI Performance CSV) and
+  `import-ai-referrals` (GA4 referral sessions filtered to known AI-assistant hosts, with an
+  explicit systematic-undercount caveat since many AI clicks arrive referrer-less) -- both feed
+  `impact.py` as ordinary metrics; no composite "AI visibility score" is ever computed.
+  `scripts/competitor_diff.py` diffs a user-named PUBLIC page's structure (title length, heading
+  outline, schema types, word count, FAQ/table/author/date signals, canonical, hreflang, internal
+  links) against your own -- body text is never stored, only a content hash; an SSRF guard refuses
+  private/loopback/link-local/reserved IPs (checked after DNS resolution, not just the literal
+  hostname) before any fetch, robots.txt is respected, and requests are rate-limited to one per
+  2 seconds. Output is always framed as "structural differences", never "why they rank" -- this
+  tool has no ranking data and must never imply it does. `aiAccess` is registered in
+  `full_audit.py`'s `TOOLS`; `competitor_diff.py` is a standalone tool (needs explicit URLs).
 
 ### Fixed
 - `scripts/impact.py`: an independent adversarial QA pass found the evaluation pipeline could be
