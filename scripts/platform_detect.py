@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Detects which non-framework-code platforms (SSG frontmatter, headless CMS, Webflow, Shopify,
 WordPress) are present and runs each detected platform's static scan. Every platform's
-`unavailable[]` list is preserved in the output unchanged -- score.py uses it to lower
-coveragePct rather than silently treating unscannable content as "fine"."""
+`unavailable[]` list is preserved in the output unchanged, visible in full_audit.py's output as
+real, checked limits -- NOT silently treated as "fine". It does not yet feed score.py's
+coveragePct number (that would need a rubric version bump; see CHANGELOG.md, deferred)."""
 import json,sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parent))

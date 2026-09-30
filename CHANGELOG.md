@@ -10,6 +10,75 @@ you bump the rubric, add a dated entry below that states the new rubric version 
 
 ## [Unreleased]
 
+### Fixed (adversarial QA pass on Phase 10-14: two confirmed SSRF vulnerabilities plus correctness bugs)
+- `scripts/competitor_diff.py`: **SSRF, redirect not re-validated.** The guard checked only the
+  first hostname before calling `urlopen`, which then followed 3xx redirects via its default
+  handler with no re-check of the redirect target -- a "public" host could 302 to an internal
+  address and its content would be returned. Every redirect hop (up to 5) is now independently
+  re-guarded before being followed.
+- `scripts/competitor_diff.py`: **SSRF, DNS-rebinding TOCTOU.** The guard resolved and validated
+  a hostname, but `urlopen` then re-resolved the same hostname itself for the actual connection --
+  a hostname that answers with a public IP at check-time and a private IP at connect-time bypassed
+  the guard entirely. The connection is now pinned to the exact IP the guard validated (a direct
+  `http.client` connection, with the real hostname sent only as the `Host` header and, for HTTPS,
+  as the SNI/certificate-validation name), never re-resolving. The private/reserved check also
+  switched from an explicit range allowlist to `not ip.is_global`, closing a gap where CGNAT/
+  Tailscale addresses (`100.64.0.0/10`) previously passed.
+- `scripts/competitor_diff.py`: `hasFAQ` matched a bare "faq" substring (e.g. a `/faq` nav link),
+  `hasAuthorSignal` matched any class merely containing "author", and `wordCount` included
+  `<script>`/`<style>` element text -- all three inflated structural signals beyond what the page
+  actually shows. A URL host of `..` could also write output one directory outside
+  `.claude/seo/competitors/`. All fixed.
+- `scripts/scan_logs.py`: **cross-vendor false "verified".** `--ranges` files from different
+  loaded vendors were pooled into one combined range set, so e.g. a GPTBot-labeled hit from an IP
+  inside Bing's published range was reported "verified" -- claiming an identity the evidence
+  didn't support. `--ranges` is now `BotName=path.json`, scoped per vendor; a hit is "verified"
+  only against its own claimed bot's ranges. Also: `topParamUrls` printed raw querystring values
+  verbatim (a real leak path for tokens/PII riding in a URL) -- values are now redacted, param
+  names kept; a `--ranges` file that fails to parse is now a hard error instead of a silent drop
+  that left the summary claiming "No --ranges given"; a JSONL line that parses but isn't an
+  object no longer crashes with an uncaught `AttributeError`.
+- `scripts/ci_check.py`: **a PR could weaken its own gate.** `.claude/seo/ci.json` was read from
+  the head/PR being audited, so a PR could ship `{"failOn":[]}` alongside a real new HIGH finding
+  and pass CI anyway. Config is now read from the BASE (trusted) ref only. `ignore[]` entries with
+  no `expires` field were treated as permanently active; they're now always reported as expired,
+  never silently applied. `annotations()` printed GitHub workflow-command annotations without
+  escaping `%`/`\r`/`\n` in a finding's path or text, letting an embedded newline start a second,
+  injected workflow command (confirmed reproducible) -- now percent-escaped per GitHub's own
+  workflow-command escaping rules. Also: `--base-ref` values starting with `-` are now rejected
+  (git-option-injection guard), and the base/head scratch copy now passes `symlinks=True` so a
+  symlink pointing outside the repo is copied as a symlink, never followed and its target copied.
+- `scripts/live_data.py` `import_ai_referrals`: substring host-matching overcounted
+  (`claude.ai.evil.com` matched `claude.ai`) and undercounted (missed `chat.openai.com`). Now an
+  exact-host-or-real-subdomain check, and `chat.openai.com` is in the known host list.
+- `templates/github-action/seo-architect.yml`: added `persist-credentials: false` to the checkout
+  step -- the workflow never needs the checkout token to persist afterward.
+- `references/security.md`: corrected the SSRF-guard description to match the fix above (it
+  previously claimed DNS-rebinding was "also refused," which was false until this pass).
+- **Golden-fixture false alarm, not a real bug**: `worked_example_before_after_matches_golden_summary`
+  appeared to regress (score 60.0 vs. golden 58.3) during this QA pass. Root cause: an earlier
+  manual `full_audit.py --score` run had been pointed directly at the committed
+  `examples/worked-example-nextjs/{before,after}` fixtures instead of a scratch copy, writing a
+  stray `.claude/seo/baseline.json` into each and changing which `technical` checks were
+  applicable. Removed the stray files; no code change was needed. (This is exactly the mutation
+  `ci_check.py`'s own `run_audit()` scratch-copy discipline exists to prevent -- the fixtures
+  themselves just aren't protected by that same discipline when run against directly.)
+
+### Deferred (documented, not silently dropped)
+- `references/platform-coverage.md` and `platform_detect.py`'s docstring claimed `score.py` lowers
+  `coveragePct` for a platform adapter's `unavailable[]` entries; `score.py` never referenced
+  platforms at all. Corrected both to state reality: platform `unavailable[]` entries appear in
+  `full_audit.py`'s output but do not yet feed the score, since doing so needs a rubric version
+  bump. Tracked here rather than implemented under this pass's time budget.
+- Not yet addressed by this pass (found by the same QA pass, still open): `validate_ai_access.py`'s
+  robots.txt group-merging doesn't fully implement RFC 9309 §2.2.1 multi-group merging, and its
+  per-bot consequence text cites `references/sources.json` entries that don't yet exist for
+  GPTBot/ClaudeBot/OAI-SearchBot/Perplexity/CCBot/Applebot; several platform adapters
+  (`ssg_frontmatter.py`, `shopify.py`, `headless_cms.py`) have known false-positive/false-negative
+  cases (Hugo page bundles, TOML frontmatter, Shopify over-detection on any `.liquid` file, a
+  `Disallow: /` string-comparison bug); `render_diff.py`'s basename-fallback file pairing can pair
+  unrelated files. Flagged for a follow-up pass.
+
 ### Added
 - `scripts/ci_check.py`: PR/CI-time SEO regression check. Runs `full_audit.py --score` on a base
   ref (via `git archive`, no working-tree checkout needed) and on the current project inside

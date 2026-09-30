@@ -171,7 +171,15 @@ def import_bing_ai(root,csv_path,start,end,label):
     print(json.dumps({'tool':'live-data-import-bing-ai','rowsImported':len(rows),'dateRange':date_range,'wrote':str(path)},indent=2))
     return 0
 
-AI_REFERRER_HOSTS=('chatgpt.com','perplexity.ai','copilot.microsoft.com','gemini.google.com','claude.ai')
+AI_REFERRER_HOSTS=('chatgpt.com','chat.openai.com','perplexity.ai','copilot.microsoft.com','gemini.google.com','claude.ai')
+
+def _matches_ai_referrer_host(source):
+    """A bare substring match (e.g. 'claude.ai' in 'claude.ai.evil.com') overcounts an unrelated
+    host as an AI referrer; this requires an exact host match or a proper subdomain boundary
+    (source ends with '.claude.ai'), which also fixes the 'chat.openai.com' miss above."""
+    source=(source or '').lower().strip()
+    host=re.sub(r'^https?://','',source).split('/',1)[0]
+    return any(host==h or host.endswith('.'+h) for h in AI_REFERRER_HOSTS)
 
 def import_ai_referrals(root,csv_path,start,end,label):
     """GA4 referral-sessions export filtered to known AI-assistant referrer hosts. Caveat, always
@@ -181,7 +189,7 @@ def import_ai_referrals(root,csv_path,start,end,label):
     rows=[_normalize_row_keys(r) for r in _csv_rows(csv_path)]
     if _rows_have_secret(rows):
         print('ERROR: the CSV appears to contain a secret-like value; refusing to import.',file=sys.stderr); return 2
-    matched=[r for r in rows if any(h in (r.get('source') or r.get('referrer') or '').lower() for h in AI_REFERRER_HOSTS)]
+    matched=[r for r in rows if _matches_ai_referrer_host(r.get('source') or r.get('referrer'))]
     date_range=_date_range_arg(start,end)
     note=('GA4 referral-sessions export, filtered to known AI-assistant referrer hosts ('+', '.join(AI_REFERRER_HOSTS)+'). '
           'This systematically UNDERCOUNTS AI-driven traffic: many AI-assistant clicks arrive with no referrer at all.')

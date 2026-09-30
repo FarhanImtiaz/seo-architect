@@ -95,7 +95,7 @@ python3 /path/to/seo-architect/scripts/impact.py evaluate . <id>          # only
 python3 /path/to/seo-architect/scripts/validate_claims.py .               # advisory scan for unbacked outcome language in .claude/seo/
 python3 /path/to/seo-architect/scripts/ci_check.py . --base-ref <ref>     # PR/CI-time regression check; see workflows/ci.md
 python3 /path/to/seo-architect/scripts/render_diff.py --response <dir> --rendered <dir>  # only with real build output and, optionally, a real rendered DOM dump
-python3 /path/to/seo-architect/scripts/scan_logs.py <access.log> --ranges <ranges.json>  # only with a real, user-supplied log file -- never fetched
+python3 /path/to/seo-architect/scripts/scan_logs.py <access.log> --ranges Googlebot=<ranges.json>  # only with a real, user-supplied log file -- never fetched; --ranges is scoped BotName=path so verification never crosses vendors
 python3 /path/to/seo-architect/scripts/competitor_diff.py <public-url>    # structural diff only, never a rank claim -- see references/assurance-model.md
 python3 /path/to/seo-architect/scripts/live_data.py import-bing-ai . <csv>       # only when the user has authorized data and asks
 python3 /path/to/seo-architect/scripts/live_data.py import-ai-referrals . <csv>  # only when the user has authorized data and asks

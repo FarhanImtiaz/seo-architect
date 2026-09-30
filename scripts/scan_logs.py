@@ -35,6 +35,7 @@ def parse_line(line):
 def parse_jsonl(line):
     try: row=json.loads(line)
     except json.JSONDecodeError: return None
+    if not isinstance(row,dict): return None  # a JSONL line that parses but isn't an object (e.g. a bare list/string/number) must be skipped, not crash on .get()
     ip=row.get('clientIP') or row.get('ip') or row.get('client_ip')
     ua=row.get('userAgent') or row.get('ua') or ''
     path=(row.get('uri') or row.get('path') or row.get('url') or '')
@@ -42,24 +43,55 @@ def parse_jsonl(line):
     if not ip: return None
     return {'ip':ip,'path':path,'status':status,'ua':ua}
 
-def load_ranges(paths):
-    nets=[]
-    for pth in paths or []:
+def load_ranges(specs):
+    """Each --ranges spec is 'BotName[,BotName2,...]=path.json' -- a range file is scoped to the
+    specific bot vendor(s) it actually verifies, so a GPTBot hit from an IP that happens to fall
+    inside a DIFFERENTLY-loaded vendor's range (e.g. Bing's) is never reported "verified"; a hit
+    is only verified against ranges explicitly associated with its own claimed bot. A file that
+    fails to parse is a hard error here, not a silent drop -- silently dropping it would make the
+    summary's own "No --ranges given" note actively false."""
+    nets_by_bot=defaultdict(list)
+    for spec in specs or []:
+        botlist,eq,pth=spec.partition('=')
+        if not eq:
+            print(f'ERROR: --ranges must be BotName=path.json (e.g. Googlebot=google-ranges.json), got: {spec!r}',file=sys.stderr); sys.exit(2)
+        bots=[b.strip() for b in botlist.split(',') if b.strip()]
+        unknown=[b for b in bots if b not in BOTS]
+        if unknown:
+            print(f'ERROR: unknown bot name(s) in --ranges: {unknown}. Known: {sorted(BOTS)}',file=sys.stderr); sys.exit(2)
         try: data=json.loads(Path(pth).read_text())
-        except (json.JSONDecodeError,OSError): continue
+        except (json.JSONDecodeError,OSError) as e:
+            print(f'ERROR: could not parse --ranges file {pth!r}: {e}',file=sys.stderr); sys.exit(2)
         prefixes=data.get('prefixes',data if isinstance(data,list) else [])
+        nets=[]
         for entry in prefixes:
             cidr=entry.get('ipv4Prefix') or entry.get('ipv6Prefix') or entry.get('prefix') if isinstance(entry,dict) else entry
             if cidr:
                 try: nets.append(ipaddress.ip_network(cidr))
                 except ValueError: pass
-    return nets
+        for b in bots: nets_by_bot[b].extend(nets)
+    return nets_by_bot
 
-def verify(ip,nets):
+def verify(ip,bot,nets_by_bot):
+    nets=nets_by_bot.get(bot)
     if not nets: return None
     try: addr=ipaddress.ip_address(ip)
     except ValueError: return False
     return any(addr in n for n in nets)
+
+def _redact_query(path):
+    """Keeps parameter NAMES (diagnostic value: which params show up in crawl waste) but redacts
+    every value -- a raw querystring can carry secrets or PII (?token=..., ?email=...) and this
+    output is printed/persisted, so the same redaction discipline already applied to IPs must
+    apply here too."""
+    if '?' not in path: return path
+    base,_,qs=path.partition('?')
+    pairs=[]
+    for kv in qs.split('&'):
+        if not kv: continue
+        k,eq,v=kv.partition('=')
+        pairs.append(f'{k}=<redacted>' if eq else k)
+    return base+'?'+'&'.join(pairs) if pairs else base
 
 def bot_of(ua):
     for name,key in BOTS.items():
@@ -69,10 +101,10 @@ def bot_of(ua):
 def main():
     q=argparse.ArgumentParser()
     q.add_argument('logfile'); q.add_argument('--format',choices=['combined','jsonl'],default='combined')
-    q.add_argument('--ranges',action='append',default=[],help='JSON file(s) of a bot vendor\'s published IP ranges, for offline CIDR verification')
+    q.add_argument('--ranges',action='append',default=[],help='BotName[,BotName2]=path.json -- a vendor\'s published IP ranges, scoped to the bot(s) they actually verify (e.g. Googlebot=google-ranges.json)')
     q.add_argument('--sitemap',help='sitemap.xml to cross-check for zero-verified-hit URLs')
     a=q.parse_args()
-    nets=load_ranges(a.ranges)
+    nets_by_bot=load_ranges(a.ranges)
     hits=[]
     lines=Path(a.logfile).read_text(errors='ignore').splitlines()
     parser=parse_jsonl if a.format=='jsonl' else parse_line
@@ -83,16 +115,16 @@ def main():
     for row in hits:
         b=bot_of(row['ua'])
         if not b: continue
-        v=verify(row['ip'],nets)
+        v=verify(row['ip'],b,nets_by_bot)
         bot_hits.append({'bot':b,'ip_truncated':truncate_ip(row['ip']),'path':row['path'].split('?',1)[0],'status':row['status'],'verified':v})
     by_bot_status=defaultdict(Counter)
     for h in bot_hits: by_bot_status[h['bot']][f"{h['status']}:{'verified' if h['verified'] else ('unverified' if h['verified'] is False else 'ua-claimed')}"]+=1
-    param_urls=Counter(row['path'] for row in hits if '?' in row['path'])
+    param_urls=Counter(_redact_query(row['path']) for row in hits if '?' in row['path'])
     not_found=Counter(row['path'].split('?',1)[0] for row in hits if row['status']=='404')
     redirects=Counter(row['path'].split('?',1)[0] for row in hits if row['status'].startswith('3'))
     ai_blocked=[h for h in bot_hits if h['bot'] in ('GPTBot','OAI-SearchBot','ChatGPT-User','ClaudeBot','Claude-SearchBot','Claude-User','PerplexityBot') and h['status'] in ('403','429')]
     fs=[]
-    if not nets and bot_hits: fs.append({'severity':'INFO','issue':f'No --ranges given; all {len(bot_hits)} bot-labeled hit(s) are "ua-claimed" only (a user agent string is not proof of identity).'})
+    if not nets_by_bot and bot_hits: fs.append({'severity':'INFO','issue':f'No --ranges given; all {len(bot_hits)} bot-labeled hit(s) are "ua-claimed" only (a user agent string is not proof of identity).'})
     spoofed=[h for h in bot_hits if h['verified'] is False]
     if spoofed: fs.append({'severity':'MEDIUM','issue':f'{len(spoofed)} hit(s) claim a known bot user-agent but come from an IP outside that vendor\'s published ranges (spoofed or stale range list).'})
     if ai_blocked: fs.append({'severity':'LOW','issue':f'{len(ai_blocked)} AI-crawler hit(s) got 403/429 -- possible WAF/firewall blocking not visible in robots.txt.'})

@@ -2,6 +2,7 @@
 import json, re, subprocess, sys, tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 ROOT=Path(__file__).resolve().parents[1]; TOOLS=ROOT/'scripts/seo_tools.py'; INIT=ROOT/'scripts/init_state.py'; FIX=ROOT/'tests/fixtures/site'; HOOK=ROOT/'scripts/guardian_hook.py'; LEDGER=ROOT/'scripts/evidence_ledger.py'; CONTRACT=ROOT/'scripts/validate_page_contract.py'; FRAMEWORK=ROOT/'scripts/framework_inspect.py'; ADAPTERS=ROOT/'scripts/framework_adapters.py'; AEO=ROOT/'scripts/validate_aeo.py'; FULL=ROOT/'scripts/full_audit.py'; CLAUDE=ROOT/'scripts/validate_claude_skill.py'; SCORE=ROOT/'scripts/score.py'; VALSRC=ROOT/'scripts/validate_sources.py'; PATTERNMATCH=ROOT/'scripts/pattern_match.py'; LINKGRAPH=ROOT/'scripts/scan_link_graph.py'; IMAGES=ROOT/'scripts/scan_images.py'; METAEXTRACT=ROOT/'scripts/metadata_extract.py'; HREFLANG=ROOT/'scripts/validate_hreflang.py'; LIVEDATA=ROOT/'scripts/live_data.py'; CI=ROOT/'scripts/ci_check.py'; REDIRECTS=ROOT/'scripts/scan_redirects.py'; CANONICALS=ROOT/'scripts/scan_canonicals.py'; FRESHNESS=ROOT/'scripts/scan_freshness.py'; RENDERDIFF=ROOT/'scripts/render_diff.py'; SCANLOGS=ROOT/'scripts/scan_logs.py'; PLATFORMS=ROOT/'scripts/platform_detect.py'; PLATFORMFIX=ROOT/'tests/fixtures/platforms'; AIACCESS=ROOT/'scripts/validate_ai_access.py'; COMPETITOR=ROOT/'scripts/competitor_diff.py'; BUILDDIST=ROOT/'scripts/build_dist.py'
 def run(*args, ok=(0,)):
  p=subprocess.run([sys.executable,*map(str,args)],capture_output=True,text=True)
@@ -815,8 +816,10 @@ def ci_check_expired_ignore_still_fails_the_build():
  f=first['diff']['newFindings'][0]
  fp='|'.join([f['tool'],str(f.get('severity','')),(f.get('issue') or '').strip(),(f.get('file') or '').strip()])
  cfg={'failOn':['new-critical','new-high'],'ignore':[{'fingerprint':fp,'reason':'test','expires':'2000-01-01'}]}
- # ci_check.py reads .claude/seo/ci.json relative to the PROJECT dir (the head), which here is `before`
- ci_json=before/'.claude/seo/ci.json'; ci_json.parent.mkdir(parents=True,exist_ok=True)
+ # ci_check.py reads .claude/seo/ci.json from the BASE (trusted) side, never the head/PR being
+ # audited -- otherwise a PR could ship its own {"failOn":[]} alongside a real regression and
+ # silence the gate that's supposed to be checking it. Here `--base-dir after` is the base.
+ ci_json=after/'.claude/seo/ci.json'; ci_json.parent.mkdir(parents=True,exist_ok=True)
  ci_json.write_text(json.dumps(cfg))
  out2=subprocess.run([sys.executable,str(CI),str(before),'--base-dir',str(after)],capture_output=True,text=True)
  assert out2.returncode==1, 'an EXPIRED ignore must not suppress the finding -- the build must still fail'
@@ -833,6 +836,44 @@ def ci_check_sarif_has_required_keys():
  run_=sarif['runs'][0]; assert run_['tool']['driver']['name']
  assert isinstance(run_['results'],list) and run_['results']
  assert run_['results'][0]['locations'][0]['physicalLocation']['artifactLocation']['uri']
+
+@test
+def ci_check_a_pr_cannot_weaken_its_own_gate_via_head_side_config():
+ # A malicious PR could add {"failOn":[]} to its OWN .claude/seo/ci.json alongside a real
+ # regression, hoping to silence the gate that's supposed to be checking it. Config must be read
+ # from the BASE (trusted) side only -- a head-side ci.json weakening failOn must have no effect.
+ before,after=_ci_pair()
+ (before/'.claude/seo/ci.json').parent.mkdir(parents=True,exist_ok=True)
+ (before/'.claude/seo/ci.json').write_text(json.dumps({'failOn':[],'ignore':[]}))
+ p=subprocess.run([sys.executable,str(CI),str(before),'--base-dir',str(after)],capture_output=True,text=True)
+ assert p.returncode==1, 'a head-side ci.json weakening failOn to [] must NOT suppress a real regression'
+ dec=json.JSONDecoder(); out,_=dec.raw_decode(p.stdout)
+ assert 'new-high' in out['triggers'], f'the base side\'s default failOn rules must still apply: {out}'
+
+@test
+def ci_check_ignore_without_expires_is_never_active():
+ before,after=_ci_pair()
+ raw=run(CI,before,'--base-dir',after,ok=(0,1))
+ dec=json.JSONDecoder(); first,_=dec.raw_decode(raw)
+ f=first['diff']['newFindings'][0]
+ fp='|'.join([f['tool'],str(f.get('severity','')),(f.get('issue') or '').strip(),(f.get('file') or '').strip()])
+ cfg={'failOn':['new-critical','new-high'],'ignore':[{'fingerprint':fp,'reason':'no expiry set'}]}
+ ci_json=after/'.claude/seo/ci.json'; ci_json.parent.mkdir(parents=True,exist_ok=True); ci_json.write_text(json.dumps(cfg))
+ out2=subprocess.run([sys.executable,str(CI),str(before),'--base-dir',str(after)],capture_output=True,text=True)
+ assert out2.returncode==1, 'an ignore with no expires field must never be treated as permanently active'
+ parsed,_=dec.raw_decode(out2.stdout)
+ assert parsed['expiredIgnores'], f'a missing-expires ignore must be reported as expired, not silently applied: {parsed}'
+
+@test
+def ci_check_annotation_output_escapes_workflow_command_injection():
+ # A finding whose file path or issue text contains a newline plus a fake workflow command must
+ # not let that text start a real, separate GitHub workflow command in the runner's log.
+ import ci_check as cc
+ d={'newFindings':[{'tool':'seo','severity':'HIGH','issue':'x\n::add-mask::INJECTED','file':'a\r::error::b'}]}
+ lines=cc.annotations(d)
+ assert len(lines)==1, f'one finding must produce exactly one annotation line, not an injected extra one: {lines}'
+ assert '\n' not in lines[0] and '\r' not in lines[0], f'a raw newline/CR would let injected text start a second, separate workflow command: {lines[0]!r}'
+ assert '%0A' in lines[0] and '%0D' in lines[0], f'the embedded newline/carriage-return must be percent-escaped, not stripped or passed through: {lines[0]!r}'
 
 @test
 def scan_redirects_detects_chain_loop_and_unresolved_target():
@@ -922,10 +963,11 @@ def scan_logs_spoofed_googlebot_is_unverified_real_one_is_verified():
    '203.0.113.5 - - [01/Jan/2026:00:00:02 +0000] "GET /c?utm=1 HTTP/1.1" 404 0 "-" "GPTBot/1.0"',
   ]))
   ranges=p/'ranges.json'; ranges.write_text(json.dumps({'prefixes':[{'ipv4Prefix':'66.249.64.0/19'}]}))
-  out=json.loads(run(SCANLOGS,log,'--ranges',ranges,ok=(0,1)))
+  out=json.loads(run(SCANLOGS,log,'--ranges',f'Googlebot={ranges}',ok=(0,1)))
   gb=out['summary']['byBotStatus']['Googlebot']
   assert gb.get('200:verified')==1 and gb.get('200:unverified')==1, gb
-  assert out['summary']['topParamUrls']==[['/c?utm=1',1]], out['summary']['topParamUrls']
+  # query VALUES are redacted (secrets/PII can ride in a querystring), but the param NAME survives
+  assert out['summary']['topParamUrls']==[['/c?utm=<redacted>',1]], out['summary']['topParamUrls']
   assert out['summary']['top404s']==[['/c',1]], out['summary']['top404s']
 
 @test
@@ -935,6 +977,36 @@ def scan_logs_never_persists_a_raw_ip():
   log.write_text('203.0.113.77 - - [01/Jan/2026:00:00:00 +0000] "GET /a HTTP/1.1" 200 512 "-" "GPTBot/1.0"')
   out=run(SCANLOGS,log,ok=(0,1))
   assert '203.0.113.77' not in out, 'a raw, untruncated IP must never appear in scan_logs.py output'
+
+@test
+def scan_logs_ranges_are_scoped_per_vendor_not_pooled():
+ # a GPTBot hit from an IP inside Google's (or Bing's) range must NOT be reported "verified" just
+ # because SOME --ranges file was loaded for a different bot -- verification must be scoped to
+ # the specific vendor's own ranges.
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td); log=p/'access.log'
+  log.write_text('66.249.66.1 - - [01/Jan/2026:00:00:00 +0000] "GET /a HTTP/1.1" 200 512 "-" "GPTBot/1.0"')
+  ranges=p/'google-ranges.json'; ranges.write_text(json.dumps({'prefixes':[{'ipv4Prefix':'66.249.64.0/19'}]}))
+  out=json.loads(run(SCANLOGS,log,'--ranges',f'Googlebot={ranges}',ok=(0,1)))
+  gb=out['summary']['byBotStatus']['GPTBot']
+  assert gb.get('200:verified') is None, f'a GPTBot hit must not be "verified" against Googlebot-scoped ranges: {gb}'
+  assert gb.get('200:ua-claimed')==1, gb
+
+@test
+def scan_logs_malformed_ranges_file_is_a_hard_error_not_a_silent_drop():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td); log=p/'access.log'; log.write_text('1.2.3.4 - - [01/Jan/2026:00:00:00 +0000] "GET /a HTTP/1.1" 200 512 "-" "GPTBot/1.0"')
+  bad=p/'bad-ranges.json'; bad.write_text('{not valid json')
+  r=subprocess.run([sys.executable,str(SCANLOGS),str(log),'--ranges',f'GPTBot={bad}'],capture_output=True,text=True)
+  assert r.returncode==2 and 'could not parse' in (r.stdout+r.stderr).lower(), 'a --ranges file that fails to parse must be a hard, explicit error, not a silent drop that then falsely claims no ranges were given'
+
+@test
+def scan_logs_malformed_jsonl_line_is_skipped_not_a_crash():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td); log=p/'access.jsonl'
+  log.write_text('\n'.join(['["not","an","object"]','{"clientIP":"1.2.3.4","userAgent":"GPTBot/1.0","uri":"/a","status":200}']))
+  out=json.loads(run(SCANLOGS,log,'--format','jsonl',ok=(0,1)))
+  assert out['summary']['parsedLines']==1, out
 
 @test
 def platform_detect_ssg_frontmatter_flags_draft_in_sitemap_and_no_desc():
@@ -1019,6 +1091,96 @@ def competitor_diff_from_file_reports_structure_not_body_text():
   assert 'why they rank' not in full_text and 'will rank' not in full_text
 
 @test
+def competitor_diff_redirect_to_internal_target_is_refused_not_followed():
+ # SSRF bypass 1: a host that passes the guard (simulating a real public host) must not be
+ # allowed to then 302 to a private/loopback target -- each hop must be re-validated, not just
+ # the first URL before urlopen's own redirect handler silently follows the rest.
+ import http.server,threading
+ import competitor_diff as cd
+ class H(http.server.BaseHTTPRequestHandler):
+  def do_GET(self):
+   self.send_response(302); self.send_header('Location','http://127.0.0.2/admin'); self.end_headers()
+  def log_message(self,*a): pass
+ srv=http.server.HTTPServer(('127.0.0.1',0),H); port=srv.server_port
+ t=threading.Thread(target=srv.serve_forever,daemon=True); t.start()
+ real_guarded_ip=cd._guarded_ip
+ def fake_guarded_ip(host):
+  # 'public.example' stands in for a hostname that legitimately resolves to a public IP; every
+  # OTHER host (including the redirect target below) still goes through the real, unmocked check.
+  if host=='public.example': return '127.0.0.1'
+  return real_guarded_ip(host)
+ cd._guarded_ip=fake_guarded_ip
+ try:
+  try:
+   cd.fetch(f'http://public.example:{port}/start','test-ua')
+   raise AssertionError('a redirect to a loopback target must be refused, not followed')
+  except cd.SSRFBlocked as e:
+   assert '127.0.0.2' in str(e), f'must name the actual blocked hop, not the original host: {e}'
+ finally:
+  cd._guarded_ip=real_guarded_ip; srv.shutdown()
+
+@test
+def competitor_diff_connection_pins_to_the_ip_the_guard_checked():
+ # SSRF bypass 2 (DNS rebinding): the IP the guard validates and the IP actually connected to
+ # must be the SAME resolution -- if the code re-resolved the hostname a second time (as
+ # urlopen's own resolver would), a hostname whose DNS answer differs between the two lookups
+ # could present a safe IP to the guard and a private IP to the real connection. Assert
+ # getaddrinfo is consulted exactly once per hostname per hop, proving no second, unpinned
+ # resolution happens between the check and the connection.
+ import http.server,threading,socket
+ import competitor_diff as cd
+ class H(http.server.BaseHTTPRequestHandler):
+  def do_GET(self):
+   self.send_response(200); self.send_header('Content-Type','text/html'); self.end_headers()
+   self.wfile.write(b'<html><head><title>t</title></head><body>ok</body></html>')
+  def log_message(self,*a): pass
+ srv=http.server.HTTPServer(('127.0.0.1',0),H); port=srv.server_port
+ t=threading.Thread(target=srv.serve_forever,daemon=True); t.start()
+ calls=[]
+ real_getaddrinfo=socket.getaddrinfo
+ def counting_getaddrinfo(host,*a,**kw):
+  calls.append(host)
+  if host=='rebind.example': return [(socket.AF_INET,socket.SOCK_STREAM,6,'',('127.0.0.1',0))]
+  return real_getaddrinfo(host,*a,**kw)
+ real_is_global=cd.ipaddress.IPv4Address.is_global
+ def patched_is_global(self):
+  if str(self)=='127.0.0.1': return True  # stand-in for "this resolved to a real public IP"
+  return real_is_global.fget(self)
+ socket.getaddrinfo=counting_getaddrinfo
+ cd.ipaddress.IPv4Address.is_global=property(patched_is_global)
+ try:
+  # _guarded_get (not fetch()) isolates a single hop -- fetch() also checks robots.txt as a
+  # separate, legitimately independent request, which would double-count resolutions here.
+  body=cd._guarded_get(f'http://rebind.example:{port}/x','test-ua')
+  assert '<title>t</title>' in body
+  assert calls.count('rebind.example')==1, f'hostname must be resolved exactly once (pinned) for one hop, not re-resolved for the connection: {calls}'
+ finally:
+  socket.getaddrinfo=real_getaddrinfo; cd.ipaddress.IPv4Address.is_global=real_is_global; srv.shutdown()
+
+@test
+def competitor_diff_signals_are_not_inflated_by_incidental_matches():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td)/'c.html'
+  p.write_text('<html><head><title>t</title></head><body>'
+               '<nav><a href="/faq">FAQ</a></nav><script>var faq_widget_author=1;</script>'
+               '<style>.co-author-widget{color:red}</style>'
+               '<h1>Hello</h1></body></html>')
+  out=json.loads(run(COMPETITOR,'--from-file',f'https://comp.example/x={p}',ok=(0,)))
+  c=out['competitors'][0]
+  assert c['hasFAQ'] is False, 'a bare "/faq" nav link must not count as FAQ content'
+  assert c['hasAuthorSignal'] is False, 'a class merely containing "author" (co-author-widget) must not count as an author signal'
+  assert c['wordCount']<=3, f'script/style text must not be counted as visible words: {c["wordCount"]}'
+
+@test
+def competitor_diff_traversal_host_cannot_escape_the_competitors_directory():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td)/'c.html'; p.write_text('<html><head><title>t</title></head><body>x</body></html>')
+  proj=Path(td)/'proj'; proj.mkdir()
+  run(COMPETITOR,'--from-file',f'https://../evil/x={p}','--out',str(proj),ok=(0,))
+  assert not (proj.parent/'.claude').exists(), 'a ".." host must never let output escape .claude/seo/competitors/'
+  assert (proj/'.claude/seo/competitors').exists()
+
+@test
 def live_data_import_ai_referrals_filters_to_known_ai_hosts_and_flags_undercount():
  with tempfile.TemporaryDirectory() as td:
   p=Path(td); run(INIT,'--project',p)
@@ -1027,6 +1189,18 @@ def live_data_import_ai_referrals_filters_to_known_ai_hosts_and_flags_undercount
   assert out['rowsImported']==2 and out['rowsInSource']==3, out
   written=json.loads(Path(out['wrote']).read_text())
   assert 'UNDERCOUNTS' in written['limits']
+
+@test
+def live_data_import_ai_referrals_host_matching_has_no_overcount_or_undercount():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td); run(INIT,'--project',p)
+  csv=p/'ref.csv'; csv.write_text(
+   'date,source,sessions\n'
+   '2026-01-01,claude.ai.evil.com,99\n'      # must NOT match (not a real claude.ai subdomain)
+   '2026-01-01,chat.openai.com,7\n'          # must match (previously missed)
+   '2026-01-01,sub.claude.ai,4\n')           # must match (real subdomain boundary)
+  out=json.loads(run(LIVEDATA,'import-ai-referrals',p,csv,'--start','2026-01-01','--end','2026-01-01',ok=(0,)))
+  assert out['rowsImported']==2, f'expected exactly chat.openai.com and sub.claude.ai to match: {out}'
 
 @test
 def build_dist_produces_a_valid_plugin_layout_without_duplicating_plugin_files():

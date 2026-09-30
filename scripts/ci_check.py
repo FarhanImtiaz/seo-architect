@@ -15,7 +15,7 @@ def run_audit(root):
     # or an already-disposable git-archive extraction.
     scratch=Path(tempfile.mkdtemp(prefix='seo-ci-audit-'))
     try:
-        shutil.copytree(root,scratch,dirs_exist_ok=True)
+        shutil.copytree(root,scratch,dirs_exist_ok=True,symlinks=True)  # symlinks=True: a symlink pointing outside the repo must be copied AS a symlink, never followed and its target's content copied in (unbounded size, or an infinite loop on a symlink cycle)
         p=subprocess.run([sys.executable,str(HERE/'full_audit.py'),str(scratch),'--score'],capture_output=True,text=True)
     finally:
         shutil.rmtree(scratch,ignore_errors=True)
@@ -24,6 +24,8 @@ def run_audit(root):
         return {'error':'full_audit.py did not emit JSON','stderr':p.stderr.strip()}
 
 def checkout_ref(ref,project_root):
+    if ref.startswith('-'):
+        raise SystemExit(f'ERROR: --base-ref {ref!r} looks like a git option, not a ref; refusing (this is how a crafted --base-ref could inject arbitrary git flags).')
     tmp=Path(tempfile.mkdtemp(prefix='seo-ci-base-'))
     archive=tmp/'archive.tar'
     with open(archive,'wb') as fh:
@@ -74,9 +76,14 @@ def diff_audits(base,head):
     return d
 
 def apply_ignores(d,cfg):
+    # An ignore with NO `expires` field must never be treated as permanently active -- that is
+    # exactly the "an ignore can't be permanent by omission" rule. Only an ignore with a real,
+    # not-yet-passed `expires` date is active; everything else (missing, malformed, or past) is
+    # reported as expired so it's visible in the summary rather than silently doing nothing.
     today=date.today().isoformat(); active=[]; expired=[]
     for ig in cfg.get('ignore',[]):
-        (expired if ig.get('expires') and ig['expires']<today else active).append(ig)
+        exp=ig.get('expires')
+        (active if exp and exp>=today else expired).append(ig)
     active_fps={ig['fingerprint'] for ig in active if 'fingerprint' in ig}
     d['newFindings']=[f for f in d['newFindings'] if fingerprint(f['tool'],f) not in active_fps]
     return expired
@@ -111,13 +118,25 @@ def markdown_summary(d,triggers,expired):
         lines.append(''); lines.append(f"**Failing rules:** {', '.join(triggers)}")
     return '\n'.join(lines)+'\n'
 
+def _esc_data(s):
+    # GitHub workflow-command escaping for the DATA portion (after the final `::`): a finding's
+    # issue text is attacker-influenceable (it can come from a filename or other PR content), and
+    # an unescaped newline lets it start a fresh line that the runner parses as its OWN workflow
+    # command (confirmed: an embedded "\n::add-mask::..." was accepted as a real command).
+    return str(s).replace('%','%25').replace('\r','%0D').replace('\n','%0A')
+
+def _esc_prop(s):
+    # Escaping for a PROPERTY VALUE (e.g. `file=...`) additionally requires `:` and `,`, per
+    # GitHub's documented workflow-command escaping rules.
+    return _esc_data(s).replace(':','%3A').replace(',','%2C')
+
 def annotations(d):
     out=[]
     for f in d['newFindings']:
         if f.get('severity') in ('CRITICAL','HIGH'):
             level='error' if f.get('severity')=='CRITICAL' else 'warning'
-            loc=f" file={f['file']}" if f.get('file') else ''
-            out.append(f"::{level}{loc}::{f.get('tool')}: {f.get('issue','')}")
+            loc=f" file={_esc_prop(f['file'])}" if f.get('file') else ''
+            out.append(f"::{level}{loc}::{_esc_data(f.get('tool'))}: {_esc_data(f.get('issue',''))}")
     return out
 
 def to_sarif(d):
@@ -132,6 +151,9 @@ def to_sarif(d):
             'runs':[{'tool':{'driver':{'name':'seo-architect','informationUri':'https://github.com','rules':list(rules.values())}},'results':results}]}
 
 def load_cfg(root):
+    # MUST be called with the BASE (trusted) root, never the head/PR being audited -- otherwise a
+    # PR can weaken its own gate (e.g. ship `{"failOn":[]}` alongside a real new HIGH finding) and
+    # CI would pass despite a genuine regression. The base ref is the side a maintainer controls.
     p=root/'.claude/seo/ci.json'
     if p.exists():
         try: return json.loads(p.read_text())
@@ -155,7 +177,7 @@ def main():
         if tmp: shutil.rmtree(tmp,ignore_errors=True)
     if 'error' in base_audit or 'error' in head_audit:
         print(json.dumps({'tool':'ci-check','error':'audit failed to run on base or head','base':base_audit.get('error'),'head':head_audit.get('error')},indent=2)); return 2
-    cfg=load_cfg(root)
+    cfg=load_cfg(base_root)
     d=diff_audits(base_audit,head_audit)
     expired=apply_ignores(d,cfg)
     triggers=rule_triggers(d,cfg)
