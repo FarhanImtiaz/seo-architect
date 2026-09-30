@@ -10,6 +10,16 @@ you bump the rubric, add a dated entry below that states the new rubric version 
 
 ## [Unreleased]
 
+### Documented
+- `SKILL.md`, `references/assurance-model.md`: the Guardian hook's session scope does not extend
+  into a Claude Code Task/Agent-tool subagent's isolated context, even when the subagent invokes
+  this skill itself. Confirmed by direct testing: a fabricated `AggregateRating` schema edit
+  inside a subagent produced no Guardian output at all, while the identical edit in a top-level
+  session correctly triggered a review-required response. This was not a bug to fix — subagent
+  hook isolation is how Claude Code's skill-frontmatter hooks are documented to work — but the
+  prior wording ("runs... for the rest of the Claude Code session") didn't make the boundary
+  clear enough for a real usage pattern (delegating SEO work to a subagent) to be safe by default.
+
 ### Fixed (adversarial QA pass on Phase 10-14: two confirmed SSRF vulnerabilities plus correctness bugs)
 - `scripts/competitor_diff.py`: **SSRF, redirect not re-validated.** The guard checked only the
   first hostname before calling `urlopen`, which then followed 3xx redirects via its default
