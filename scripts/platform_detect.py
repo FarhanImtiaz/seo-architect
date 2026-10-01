@@ -2,8 +2,9 @@
 """Detects which non-framework-code platforms (SSG frontmatter, headless CMS, Webflow, Shopify,
 WordPress) are present and runs each detected platform's static scan. Every platform's
 `unavailable[]` list is preserved in the output unchanged, visible in full_audit.py's output as
-real, checked limits -- NOT silently treated as "fine". It does not yet feed score.py's
-coveragePct number (that would need a rubric version bump; see CHANGELOG.md, deferred)."""
+real, checked limits -- NOT silently treated as "fine". It also feeds score.py's `platform`
+rubric category (rubric version 2+): a detected platform with any `unavailable[]` entries lowers
+`coveragePct`, the same honesty model framework-code adapters already use."""
 import json,sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parent))

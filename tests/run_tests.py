@@ -395,6 +395,27 @@ def score_drops_when_title_removed():
   assert after['earned']<before, 'removing the only title must lower the on-page score'
 
 @test
+def score_platform_coverage_lowers_coveragepct_only_when_content_is_unavailable():
+ # rubric v2: a platform with ZERO unavailable[] entries (ssg-frontmatter -- content lives in the
+ # repo, nothing is DB-owned) must score the full 5 platform points and NOT lower coveragePct
+ # relative to a project with no platform detected at all (platform excluded from both).
+ # A platform WITH real unavailable[] entries (shopify -- sitemap/catalog are always DB-owned)
+ # must score less than 5 and show a correspondingly lower coveragePct.
+ def score_of(fixture_dir):
+  with tempfile.TemporaryDirectory() as d:
+   p=Path(d); subprocess.run(['cp','-R',str(fixture_dir)+'/.',str(p)],check=True); run(INIT,'--project',p)
+   return json.loads(run(SCORE,p,ok=(0,1)))
+ none_out=score_of(FIX)  # the plain framework-code fixture site: no platform detected at all
+ assert none_out['categories']['platform']['status']=='unavailable'
+ ssg_out=score_of(PLATFORMFIX/'ssg-frontmatter')
+ assert ssg_out['categories']['platform']['status']=='evidenced'
+ assert ssg_out['categories']['platform']['earned']==5.0, 'a platform with zero unavailable[] entries must earn full points'
+ shopify_out=score_of(PLATFORMFIX/'shopify')
+ assert shopify_out['categories']['platform']['status']=='evidenced'
+ assert shopify_out['categories']['platform']['earned']<5.0, 'a platform with real unavailable[] entries must earn less than full points'
+ assert shopify_out['coveragePct']<ssg_out['coveragePct'], f'real content gaps must lower coveragePct: shopify={shopify_out["coveragePct"]} ssg={ssg_out["coveragePct"]}'
+
+@test
 def score_state_completeness_stub_detection():
  with tempfile.TemporaryDirectory() as d:
   p=Path(d); subprocess.run(['cp','-R',str(FIX)+'/.',str(p)],check=True); run(INIT,'--project',p)
@@ -954,6 +975,19 @@ def render_diff_without_rendered_only_flags_noindex_and_says_so():
   assert any('No --rendered input given' in n for n in out['notes']), out
 
 @test
+def render_diff_never_pairs_files_by_basename_alone():
+ # the old basename-only fallback paired an unrelated "blog/index.html" response file with the
+ # rendered ROOT "index.html" just because both happen to be named "index.html" -- producing
+ # false findings comparing two different pages. They must now be reported as unmatched instead.
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td); (p/'response/blog').mkdir(parents=True); (p/'rendered').mkdir()
+  (p/'response/blog/index.html').write_text('<html><head><title>Blog</title><link rel="canonical" href="https://x.com/blog"/></head><body>blog</body></html>')
+  (p/'rendered/index.html').write_text('<html><head><title>Home</title><link rel="canonical" href="https://x.com/"/></head><body>home</body></html>')
+  out=json.loads(run(RENDERDIFF,'--response',p/'response','--rendered',p/'rendered',ok=(0,1)))
+  assert out['findings']==[], f'unrelated files must never be paired and diffed: {out}'
+  assert any('had no same-relative-path match' in n for n in out['notes']), out
+
+@test
 def scan_logs_spoofed_googlebot_is_unverified_real_one_is_verified():
  with tempfile.TemporaryDirectory() as td:
   p=Path(td); log=p/'access.log'
@@ -1015,6 +1049,33 @@ def platform_detect_ssg_frontmatter_flags_draft_in_sitemap_and_no_desc():
  issues=[f['issue'] for f in out['platforms']['ssg-frontmatter']['findings']]
  assert any('draft:true' in i and 'sitemap' in i for i in issues), issues
  assert out['platforms']['ssg-frontmatter']['unavailable']==[]
+ # the "ai" draft's slug must NOT false-positive-match as a substring inside the unrelated
+ # "/blog/maintain/" sitemap URL (full path-segment matching, not substring containment)
+ assert not any('"ai"' in i for i in issues), issues
+
+@test
+def platform_detect_ssg_frontmatter_hugo_page_bundles_are_not_duplicate_slugs():
+ # a/index.md and b/index.md are two separate, legitimate Hugo page-bundle pages -- the slug
+ # must come from the parent directory, not the literal "index" filename, or every bundle
+ # collides on a fake duplicate-slug HIGH finding.
+ out=json.loads(run(PLATFORMS,PLATFORMFIX/'ssg-frontmatter',ok=(0,1)))
+ issues=[f['issue'] for f in out['platforms']['ssg-frontmatter']['findings']]
+ assert not any('duplicate slug' in i.lower() and ('"index"' in i.lower() or 'index' in i.lower()) for i in issues), issues
+
+@test
+def platform_detect_ssg_frontmatter_parses_toml_frontmatter():
+ out=json.loads(run(PLATFORMS,PLATFORMFIX/'ssg-frontmatter',ok=(0,1)))
+ observed=out['platforms']['ssg-frontmatter']['observed']
+ toml_entry=next((o for o in observed if o['file'].endswith('toml/post.md')),None)
+ assert toml_entry is not None, 'TOML (+++) frontmatter was not parsed at all'
+ assert toml_entry['frontmatter'].get('title')=='TOML Post', toml_entry
+
+@test
+def platform_detect_ssg_frontmatter_does_not_misdetect_a_plain_nextjs_project():
+ # the old "A and B or C" operator-precedence bug let any project with a pages/ dir (Next.js
+ # included) plus any .md file ANYWHERE (e.g. a root README.md) misdetect as an SSG site.
+ out=json.loads(run(PLATFORMS,PLATFORMFIX/'nextjs-not-ssg',ok=(0,1)))
+ assert 'ssg-frontmatter' not in out['detected'], out['detected']
 
 @test
 def platform_detect_wordpress_flags_missing_wp_head_and_reports_unavailable():
@@ -1026,11 +1087,25 @@ def platform_detect_wordpress_flags_missing_wp_head_and_reports_unavailable():
 
 @test
 def platform_detect_shopify_flags_missing_theme_tags_and_reports_unavailable():
- out=json.loads(run(PLATFORMS,PLATFORMFIX/'shopify',ok=(0,)))
+ out=json.loads(run(PLATFORMS,PLATFORMFIX/'shopify',ok=(0,1)))
  assert 'shopify' in out['detected']
  sp=out['platforms']['shopify']
  assert any('canonical_url' in f['issue'] for f in sp['findings']), sp['findings']
  assert sp['unavailable']
+
+@test
+def platform_detect_shopify_catches_a_real_disallow_all_robots_liquid():
+ # the old `'Disallow: /\n' in text.replace(' ','')` check could never match real content --
+ # stripping all spaces also deletes the one between "Disallow:" and "/".
+ out=json.loads(run(PLATFORMS,PLATFORMFIX/'shopify',ok=(0,1)))
+ issues=[f['issue'] for f in out['platforms']['shopify']['findings']]
+ assert any('disallow all crawling' in i.lower() for i in issues), issues
+
+@test
+def platform_detect_shopify_does_not_misdetect_an_eleventy_liquid_project():
+ # any single .liquid file anywhere used to be enough to misdetect as Shopify.
+ out=json.loads(run(PLATFORMS,PLATFORMFIX/'eleventy-not-shopify',ok=(0,)))
+ assert 'shopify' not in out['detected'], out['detected']
 
 @test
 def platform_detect_webflow_flags_missing_title_and_reports_cms_collections_unavailable():
@@ -1047,6 +1122,17 @@ def platform_detect_headless_cms_flags_missing_slug_and_reports_unavailable():
  hc=out['platforms']['headless-cms']
  assert any('slug field' in f['issue'] for f in hc['findings']), hc['findings']
  assert hc['unavailable']
+
+@test
+def platform_detect_headless_cms_detected_but_unparsed_reports_unavailable_not_silence():
+ # a CMS WAS detected (payload.config.ts) but this adapter has no Payload-specific parser, so
+ # zero content types come back -- that must surface as "couldn't check", not an empty,
+ # all-clear-looking unavailable:[] the way it used to.
+ out=json.loads(run(PLATFORMS,PLATFORMFIX/'headless-cms-payload-unparsed',ok=(0,1)))
+ assert 'headless-cms' in out['detected']
+ hc=out['platforms']['headless-cms']
+ assert hc['observed']==[], hc['observed']
+ assert hc['unavailable'], 'zero parsed types must not silently read as "nothing to report"'
 
 @test
 def platform_detect_finds_nothing_on_a_plain_nextjs_project():
@@ -1069,6 +1155,29 @@ def validate_ai_access_respects_bot_specific_group_over_wildcard():
   # actual advisory phrasing rather than the bare substring)
   full=json.dumps(out).lower()
   assert 'you should' not in full and 'we recommend' not in full
+
+@test
+def validate_ai_access_merges_multiple_groups_for_the_same_token():
+ # RFC 9309 S2.2.1: two separate "User-agent: GPTBot" groups must be merged, not have only the
+ # first used -- a second group's "Disallow: /" must still be honored.
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td)
+  (p/'robots.txt').write_text('User-agent: GPTBot\nAllow: /blog\n\nUser-agent: GPTBot\nDisallow: /\n')
+  out=json.loads(run(AIACCESS,p,ok=(0,)))
+  assert out['accessMatrix']['GPTBot']['blocked'] is True, out['accessMatrix']['GPTBot']
+
+@test
+def validate_ai_access_disallow_star_is_a_full_block_and_empty_allow_is_a_noop():
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td)
+  (p/'robots.txt').write_text('User-agent: ClaudeBot\nDisallow: /*\n')
+  out=json.loads(run(AIACCESS,p,ok=(0,)))
+  assert out['accessMatrix']['ClaudeBot']['blocked'] is True, out['accessMatrix']['ClaudeBot']
+ with tempfile.TemporaryDirectory() as td:
+  p=Path(td)
+  (p/'robots.txt').write_text('User-agent: PerplexityBot\nDisallow: /\nAllow:\n')
+  out=json.loads(run(AIACCESS,p,ok=(0,)))
+  assert out['accessMatrix']['PerplexityBot']['blocked'] is True, 'an empty Allow: value is a no-op, not allow-everything'
 
 @test
 def competitor_diff_ssrf_guard_blocks_loopback_and_never_stores_body_text():

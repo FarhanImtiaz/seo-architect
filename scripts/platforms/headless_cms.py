@@ -42,5 +42,13 @@ def scan(root):
         has_seo=any(any(h.lower() in f for h in SEO_FIELD_HINTS) for f in fields_lower)
         if not has_slug: findings.append({'severity':'MEDIUM','file':t['file'],'issue':f'Content type "{t["type"]}" has no slug field in its schema -- routes for this type may not be stable/predictable.'})
         if not has_seo: findings.append({'severity':'LOW','file':t['file'],'issue':f'Content type "{t["type"]}" has no SEO-related field (title/description/seo object) in its schema.'})
-    unavailable=[{'reason':'Actual entries live in the CMS database, not this repo.','howToUnlock':'Provide an offline export file (Sanity .ndjson, Contentful export JSON, etc.) and re-run with that import.'}] if types else []
+    if types:
+        unavailable=[{'reason':'Actual entries live in the CMS database, not this repo.','howToUnlock':'Provide an offline export file (Sanity .ndjson, Contentful export JSON, etc.) and re-run with that import.'}]
+    else:
+        # A CMS WAS detected (config file, strapi/ dir, etc. -- that's why scan() is even being
+        # called) but zero content types could be statically parsed from it (e.g. Payload and
+        # Contentful projects are detected but have no parser here yet). An empty findings/
+        # unavailable list here would silently read as "nothing to report" rather than "we
+        # couldn't check" -- make the gap explicit instead.
+        unavailable=[{'reason':'A headless CMS was detected in this project, but its content-type schema could not be statically parsed (only Sanity defineType() and Strapi content-types/*/schema.json are currently parsed).','howToUnlock':'If this is Payload, Contentful, or another CMS, provide its schema/content-type definitions or an offline export for manual review.'}]
     return {'platform':'headless-cms','findings':findings,'observed':observed,'unavailable':unavailable}

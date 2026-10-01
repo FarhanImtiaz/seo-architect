@@ -1,6 +1,9 @@
 {
-  "version": 1,
+  "version": 2,
   "categories": {
+    "platform": {"max": 5, "checks": [
+      {"id": "platform-content-visible", "points": 5, "mode": "deterministic", "source": "platforms", "formula": "ratio"}
+    ]},
     "technical": {"max": 20, "checks": [
       {"id": "robots-not-blocking-all", "points": 4, "mode": "deterministic", "source": "robots", "formula": "binary"},
       {"id": "sitemap-valid-absolute", "points": 3, "mode": "deterministic", "source": "sitemap", "formula": "binary"},

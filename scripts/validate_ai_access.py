@@ -12,22 +12,38 @@ sys.path.insert(0,str(Path(__file__).resolve().parent))
 from seo_tools import files, rel
 
 # Each entry: the literal robots.txt User-agent TOKEN, and the documented consequence of a full
-# Disallow: / for that token. Sourced from each vendor's own crawler documentation -- see
-# references/sources.json. Google-Extended is a training-data opt-out token only (it has no
-# separate "search" consequence beyond what Googlebot itself already controls).
+# Disallow: / for that token, matched to the real vendor source's own hedging (never stated more
+# confidently than the source itself does) -- see the matching id in references/sources.json.
+# Google-Extended is a training-data opt-out token only (it has no separate "search" consequence
+# beyond what Googlebot itself already controls).
 BOT_CONSEQUENCES={
-    'GPTBot':'Blocking GPTBot opts the site out of being used to train OpenAI\'s models. It does not affect ChatGPT search/browsing (that\'s OAI-SearchBot/ChatGPT-User).',
-    'OAI-SearchBot':'Blocking OAI-SearchBot removes the site from being indexed for ChatGPT\'s search feature.',
-    'ChatGPT-User':'Blocking ChatGPT-User prevents ChatGPT from fetching this site live when a user asks it to browse/visit a specific page.',
-    'Google-Extended':'Blocking Google-Extended opts the site out of being used to train Google\'s Gemini/Vertex AI models. It does not affect Google Search or AI Overviews eligibility, which are controlled by the regular Googlebot rules.',
-    'GoogleOther':'GoogleOther is used for various Google research/product fetches outside standard Search indexing; blocking it does not affect Search ranking.',
-    'ClaudeBot':'Blocking ClaudeBot opts the site out of being crawled for Anthropic\'s model training data.',
-    'Claude-SearchBot':'Blocking Claude-SearchBot removes the site from Claude\'s search-grounded answers.',
-    'Claude-User':'Blocking Claude-User prevents Claude from fetching this site live on a user\'s behalf.',
-    'PerplexityBot':'Blocking PerplexityBot removes the site from being indexed for Perplexity\'s answer engine.',
-    'CCBot':'CCBot is Common Crawl\'s general-purpose crawler; many AI labs train on Common Crawl data even if this bot alone is blocked, so blocking it is a weaker opt-out than it may appear.',
-    'Applebot':'Blocking Applebot affects Siri/Spotlight suggestions and Apple\'s search products, separate from any other AI crawler.',
-    'Applebot-Extended':'Blocking Applebot-Extended opts the site out of Apple\'s AI/ML training use of previously-crawled Applebot data, without affecting Siri/Spotlight search itself.',
+    'GPTBot':('Blocking GPTBot means the site\'s content should not be used to train OpenAI\'s generative AI foundation models. '
+               'It does not affect ChatGPT search/browsing (that\'s OAI-SearchBot/ChatGPT-User). (openai-crawlers-docs)'),
+    'OAI-SearchBot':('Sites that opt out of OAI-SearchBot are not shown in ChatGPT search answers, '
+                      'though they can still appear as navigational links. (openai-crawlers-docs)'),
+    'ChatGPT-User':('ChatGPT-User fetches pages live on a user\'s direct request; OpenAI itself states robots.txt rules may not apply to it '
+                     'because the fetch is user-initiated, not autonomous crawling -- blocking it is not guaranteed to prevent a live fetch. (openai-crawlers-docs)'),
+    'Google-Extended':('Blocking Google-Extended opts the site out of being used to train Google\'s Gemini/Vertex AI models. '
+                        'Google states it does not impact a site\'s inclusion in Google Search and is not a ranking signal. (google-common-crawlers-docs)'),
+    'GoogleOther':('GoogleOther is a generic crawler for internal Google research/development; Google states its crawling preferences '
+                    'don\'t affect any specific product, including Search ranking. (google-common-crawlers-docs)'),
+    'ClaudeBot':('Blocking ClaudeBot means the site\'s future materials should be excluded from Anthropic\'s AI model training datasets. (anthropic-claude-crawlers-docs)'),
+    'Claude-SearchBot':('Anthropic\'s own wording is hedged, not absolute: disabling Claude-SearchBot "prevents our system from indexing your '
+                         'content for search optimization, which MAY REDUCE your site\'s visibility and accuracy in user search results" -- '
+                         'not a guaranteed removal from Claude\'s answers. (anthropic-claude-crawlers-docs)'),
+    'Claude-User':('Also hedged by Anthropic: disabling Claude-User "prevents our system from retrieving your content in response to a user '
+                    'query, which MAY REDUCE your site\'s visibility for user-directed web search." (anthropic-claude-crawlers-docs)'),
+    'PerplexityBot':('Perplexity\'s own docs describe PerplexityBot\'s purpose (surfacing sites in Perplexity search results) and recommend '
+                      'allowing it, but do not explicitly state the consequence of blocking it -- that it would likely reduce or remove search '
+                      'visibility is a reasonable inference, not a direct quote. (perplexity-crawlers-docs)'),
+    'CCBot':('CCBot is Common Crawl\'s general-purpose crawler. Common Crawl\'s own page does not state whether other parties\' AI training '
+              'continues on previously-archived data independent of CCBot being blocked going forward -- the common practitioner understanding '
+              'that many AI labs train on redistributed Common Crawl archives regardless is general knowledge, not something CCBot\'s docs assert, '
+              'so blocking it alone may be a weaker opt-out than it appears. (commoncrawl-ccbot-docs)'),
+    'Applebot':('Blocking Applebot affects the Spotlight/Siri/Safari search-adjacent discovery features it powers. (apple-applebot-docs)'),
+    'Applebot-Extended':('Applebot-Extended does not crawl pages itself -- it only governs how already-crawled Applebot data is used to train '
+                          'Apple\'s generative-AI foundation models. Apple states blocking only Applebot-Extended does not affect search '
+                          'discoverability; pages can still appear in search results. (apple-applebot-docs)'),
 }
 
 def parse_groups(text):
@@ -48,18 +64,24 @@ def parse_groups(text):
             current['seen_rule']=True
     return groups
 
-def group_for(groups,token):
+def groups_for(groups,token):
+    """RFC 9309 S2.2.1: all groups naming this token (exact match, case-insensitive) are the
+    applicable group -- their rules are MERGED, not just the first group used. Falls back to the
+    wildcard group(s) only when the token has no group of its own at all."""
     exact=[g for g in groups if any(a.lower()==token.lower() for a in g['agents'])]
-    if exact: return exact[0]
+    if exact: return exact
     wildcard=[g for g in groups if any(a=='*' for a in g['agents'])]
-    return wildcard[0] if wildcard else None
+    return wildcard
 
-def is_disallowed_all(group):
-    if not group: return False,'no matching group (default allow)'
+def is_disallowed_all(matched_groups):
+    if not matched_groups: return False,'no matching group (default allow)'
+    rules=[r for g in matched_groups for r in g['rules']]
     # longest-matching-rule wins per the robots.txt de-facto standard; here we only need the
-    # simple, common case of a bare "/" disallow with no more specific allow overriding it.
-    disallow_all=any(rule=='disallow' and path.strip()=='/' for rule,path in group['rules'])
-    allow_root=any(rule=='allow' and path.strip() in ('/','') for rule,path in group['rules'])
+    # simple, common case of a bare "/" (or "/*", an equivalent full-site wildcard) disallow with
+    # no more specific allow overriding it. An empty "Allow:" value is a no-op (RFC 9309 S2.2.2 --
+    # it matches nothing), not an allow-everything rule, so it must NOT count as allow_root.
+    disallow_all=any(rule=='disallow' and path.strip() in ('/','/*') for rule,path in rules)
+    allow_root=any(rule=='allow' and path.strip() in ('/','/*') for rule,path in rules)
     return (disallow_all and not allow_root), None
 
 def main():
@@ -73,9 +95,9 @@ def main():
         text=robots_files[0].read_text(errors='ignore')
         groups=parse_groups(text)
         for bot,consequence in BOT_CONSEQUENCES.items():
-            g=group_for(groups,bot)
-            blocked,note=is_disallowed_all(g)
-            matrix[bot]={'blocked':blocked,'matchedGroup':(g['agents'] if g else None),'documentedConsequenceIfBlocked':consequence}
+            gs=groups_for(groups,bot)
+            blocked,note=is_disallowed_all(gs)
+            matrix[bot]={'blocked':blocked,'matchedGroups':[g['agents'] for g in gs] or None,'documentedConsequenceIfBlocked':consequence}
             if blocked: fs.append({'severity':'INFO','issue':f'{bot} is fully disallowed in robots.txt. {consequence}','rule':'ai-access-policy'})
     # page-level snippet controls
     snippet_hits=[]

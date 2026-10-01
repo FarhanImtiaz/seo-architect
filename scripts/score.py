@@ -275,6 +275,18 @@ def score_aeo(audit,attest,root):
     out.append(attested_check('schema-visible-alignment',3,'attested',attest,root))
     return out
 
+def score_platform(audit):
+    """Rubric v2: a detected non-framework-code platform (Shopify/WordPress/Webflow/headless CMS/
+    SSG) with real `unavailable[]` content gaps lowers coveragePct, the same honesty model the
+    framework-code adapters already apply. Not applicable (excluded, not scored zero) when no
+    such platform is detected at all -- this never penalizes an ordinary framework-code project."""
+    result=result_of(audit,'platforms')
+    detected=result.get('detected') or []
+    if not detected: return None
+    platforms=result.get('platforms',{})
+    fully_visible=sum(1 for name in detected if not (platforms.get(name,{}).get('unavailable') or []))
+    return [ratio_check('platform-content-visible',5,'ratio',fully_visible,len(detected))]
+
 def compute(root,audit,attest):
     pages=audit.get('snapshot',{}).get('result',{}).get('snapshot',{}).get('pages',[])
     sitemap_urls=audit.get('snapshot',{}).get('result',{}).get('snapshot',{}).get('sitemapUrls',[])
@@ -289,6 +301,7 @@ def compute(root,audit,attest):
         'performance':score_performance(audit,root),
         'local':score_local(root,pages,routes),
         'aeo':score_aeo(audit,attest,root),
+        'platform':score_platform(audit),
     }
     out={'rubricVersion':RUBRIC['version'],'rubricHash':RUBRIC_HASH,'categories':{},'label':RUBRIC['label']}
     total_earned=0.0; total_applicable_max=0.0; total_declared_max=0.0; unavailable_checks=[]

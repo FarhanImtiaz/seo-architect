@@ -5,8 +5,18 @@ unless the user supplies a CSV export."""
 import re
 from pathlib import Path
 
+SHOPIFY_DIRS=('sections','snippets','templates')
+
 def detect(root):
-    return (root/'layout/theme.liquid').exists() or any(root.rglob('*.liquid'))
+    """Requires actual Shopify theme structure, not just the presence of any single .liquid file
+    anywhere (which misclassified e.g. an Eleventy site using .liquid templates for an unrelated
+    reason) -- either the canonical layout/theme.liquid file, or a Shopify-shaped directory
+    (sections/, snippets/, templates/) that itself contains .liquid files."""
+    if (root/'layout/theme.liquid').exists(): return True
+    for d in SHOPIFY_DIRS:
+        dirp=root/d
+        if dirp.is_dir() and any(dirp.rglob('*.liquid')): return True
+    return False
 
 def scan(root):
     findings=[]; observed=[]
@@ -21,7 +31,12 @@ def scan(root):
     robots=root/'templates/robots.txt.liquid'
     if robots.exists():
         text=robots.read_text(errors='ignore')
-        if re.search(r'\{\{\s*-?\s*disallow\b.*\*\s*-?\s*\}\}',text,re.I) or 'Disallow: /\n' in text.replace(' ',''):
+        # The old `'Disallow: /\n' in text.replace(' ','')` check could never match real content --
+        # stripping ALL spaces also removes the space between "Disallow:" and "/", so the literal
+        # needle it searched for could never appear in any real file. Match line-by-line instead,
+        # tolerant of surrounding whitespace, case-insensitive.
+        disallow_all=any(re.match(r'^\s*disallow\s*:\s*/\s*$',line,re.I) for line in text.splitlines())
+        if re.search(r'\{\{\s*-?\s*disallow\b.*\*\s*-?\s*\}\}',text,re.I) or disallow_all:
             findings.append({'severity':'HIGH','file':'templates/robots.txt.liquid','issue':'robots.txt.liquid appears to disallow all crawling.'})
     for p in root.rglob('*.liquid'):
         text=p.read_text(errors='ignore')

@@ -1,8 +1,8 @@
-# Scoring rubric (v1)
+# Scoring rubric (v2)
 
-The 100-point audit score is computed by `scripts/score.py`, never hand-computed by the model. It consumes `full_audit.py --score` and reads the exact point breakdown from `scripts/rubric.json` (this file must stay in sync with it).
+The audit score is computed by `scripts/score.py`, never hand-computed by the model. It consumes `full_audit.py --score` and reads the exact point breakdown from `scripts/rubric.json` (this file must stay in sync with it). The nine original categories below still sum to 100 points, so `score` (earned/evidenced-max) stays a true 0-100 scale; the `platform` category added in rubric v2 adds its own 5 points to the declared total used only by `coveragePct`'s denominator, for projects where it's applicable.
 
-A category with no supporting evidence (no sitemap found, no local-business signal, no image scan wired in yet) is **excluded from the denominator**, never scored zero. The reported `score` is earned points over the evidenced maximum; `coveragePct` shows how much of the full 100 was actually evidenced. Always present both numbers, and the label "internal prioritization, not a ranking prediction."
+A category with no supporting evidence (no sitemap found, no local-business signal, no image scan wired in yet) is **excluded from the denominator**, never scored zero. The reported `score` is earned points over the evidenced maximum; `coveragePct` shows how much of the full declared total was actually evidenced. Always present both numbers, and the label "internal prioritization, not a ranking prediction."
 
 | Category | Max | Checks (points) |
 |---|---|---|
@@ -15,6 +15,7 @@ A category with no supporting evidence (no sitemap found, no local-business sign
 | Performance | 5 | images have dimensions (2, requires image scan) · no lazy-load on first image (1, requires image scan) · image weight ok (2, requires image scan) |
 | Local | 5 | NAP consistency (2) · LocalBusiness schema with address (2) · contact route exists (1) — whole category excluded unless a local-business signal (LocalBusiness schema or a phone number) is observed |
 | AEO | 10 | direct-answer signal (3) · author/org identity (2) · date signal (2) · schema/visible alignment (3, attested) |
+| Platform (v2+) | 5 | fraction of detected non-framework-code platforms (Shopify/WordPress/Webflow/headless CMS/SSG) with zero `unavailable[]` content gaps (5) — whole category excluded unless `platform_detect.py` detects at least one such platform |
 
 ## Partial credit
 

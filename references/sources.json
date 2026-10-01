@@ -449,6 +449,84 @@
       "caveats": "Confirmed 2026-09-27. Each underlying company's number is self-reported via web.dev, not independently audited.",
       "numbersQuotable": true,
       "volatile": false
+    },
+    {
+      "id": "openai-crawlers-docs",
+      "title": "OpenAI crawlers (GPTBot, OAI-SearchBot, ChatGPT-User)",
+      "publisher": "OpenAI",
+      "url": "https://developers.openai.com/api/docs/bots",
+      "type": "platform-doc",
+      "tier": "A",
+      "lastVerified": "2026-10-01",
+      "mechanism": "GPTBot: disallowing it means the site's content should not be used to train generative AI foundation models. OAI-SearchBot: sites opted out are not shown in ChatGPT search answers, though they can still appear as navigational links. ChatGPT-User: fetches pages live on a user's direct request; OpenAI states robots.txt rules may not apply to it because the action is user-initiated, not autonomous crawling.",
+      "caveats": "ChatGPT-User's robots.txt applicability is explicitly hedged by OpenAI itself, not just by this skill -- do not claim blocking it reliably prevents live fetches.",
+      "numbersQuotable": false,
+      "volatile": true
+    },
+    {
+      "id": "anthropic-claude-crawlers-docs",
+      "title": "Does Anthropic crawl data from the web, and how can site owners block the crawler?",
+      "publisher": "Anthropic",
+      "url": "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler",
+      "type": "platform-doc",
+      "tier": "A",
+      "lastVerified": "2026-10-01",
+      "mechanism": "ClaudeBot: blocking means the site's future materials should be excluded from Anthropic's AI model training datasets. Claude-User: disabling it 'prevents our system from retrieving your content in response to a user query, which may reduce your site's visibility for user-directed web search' (Anthropic's own hedged wording -- not 'removes'). Claude-SearchBot: disabling it 'prevents our system from indexing your content for search optimization, which may reduce your site's visibility and accuracy in user search results' (also hedged as 'may reduce', not a guaranteed removal).",
+      "caveats": "Anthropic's own wording for Claude-User and Claude-SearchBot is probabilistic ('may reduce'), not absolute ('removes'/'prevents appearing') -- cite it with that hedge intact.",
+      "numbersQuotable": false,
+      "volatile": true
+    },
+    {
+      "id": "google-common-crawlers-docs",
+      "title": "Verifying Googlebot and other Google crawlers",
+      "publisher": "Google",
+      "url": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
+      "type": "platform-doc",
+      "tier": "A",
+      "lastVerified": "2026-10-01",
+      "mechanism": "Google-Extended does not impact a site's inclusion in Google Search, and is not used as a ranking signal in Google Search -- it only controls use by Gemini/Vertex AI training and grounding. GoogleOther is a generic crawler for internal research/development; Google states its crawling preferences don't affect any specific product.",
+      "caveats": null,
+      "numbersQuotable": false,
+      "volatile": true
+    },
+    {
+      "id": "perplexity-crawlers-docs",
+      "title": "Perplexity crawlers (PerplexityBot, Perplexity-User)",
+      "publisher": "Perplexity",
+      "url": "https://docs.perplexity.ai/guides/bots",
+      "type": "platform-doc",
+      "tier": "B",
+      "lastVerified": "2026-10-01",
+      "mechanism": "PerplexityBot surfaces websites in Perplexity's search results and is described as not used to crawl content for AI foundation models. Perplexity-User fetches pages live on direct user request and the docs state it 'generally ignores robots.txt rules'.",
+      "caveats": "The page does not explicitly state the consequence of blocking PerplexityBot -- it only documents the bot's purpose and recommends allowing it; the blocking consequence here is a reasonable inference, not a direct quote, hence tier B not A.",
+      "numbersQuotable": false,
+      "volatile": true
+    },
+    {
+      "id": "commoncrawl-ccbot-docs",
+      "title": "CCBot",
+      "publisher": "Common Crawl Foundation",
+      "url": "https://commoncrawl.org/ccbot",
+      "type": "platform-doc",
+      "tier": "B",
+      "lastVerified": "2026-10-01",
+      "mechanism": "CCBot crawls the web to produce and maintain an open, redistributable web-crawl archive. The page gives the exact robots.txt directive to block it (User-agent: CCBot / Disallow: /) but does not itself state whether other parties' AI training continues to use previously-archived Common Crawl data independent of CCBot being blocked going forward.",
+      "caveats": "The claim that 'many AI labs train on Common Crawl data even if this bot alone is blocked' is general practitioner knowledge about how the Common Crawl archive is redistributed and reused, not a statement commoncrawl.org's own page makes -- cite it as an inference about the archive's reuse, not as something CCBot's docs assert.",
+      "numbersQuotable": false,
+      "volatile": false
+    },
+    {
+      "id": "apple-applebot-docs",
+      "title": "About Applebot",
+      "publisher": "Apple",
+      "url": "https://support.apple.com/en-us/119829",
+      "type": "platform-doc",
+      "tier": "A",
+      "lastVerified": "2026-10-01",
+      "mechanism": "Applebot powers Spotlight, Siri, and Safari search-adjacent features; blocking it affects those discovery surfaces. Applebot-Extended is separate and does not crawl pages itself -- it only governs how already-crawled Applebot data is used for training Apple's generative-AI foundation models; blocking only Applebot-Extended does not affect search discoverability, and pages can still appear in search results.",
+      "caveats": null,
+      "numbersQuotable": false,
+      "volatile": true
     }
   ]
 }

@@ -4,11 +4,26 @@ All notable changes to this skill package are documented here. The format follow
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
-Rubric version: 1 (unchanged since introduction). `scripts/validate_claude_skill.py` fails the
-build if `scripts/rubric.json`'s `version` field changes without a matching entry here — when
-you bump the rubric, add a dated entry below that states the new rubric version number.
+Rubric version: 2 (bumped from 1 on 2026-10-01, see below). `scripts/validate_claude_skill.py`
+fails the build if `scripts/rubric.json`'s `version` field changes without a matching entry here —
+when you bump the rubric, add a dated entry below that states the new rubric version number.
 
 ## [Unreleased]
+
+### Changed — rubric version 2 (2026-10-01)
+- Added a `platform` category (5 points, check `platform-content-visible`) to `scripts/rubric.json`
+  and `scripts/score.py`: wires `platform_detect.py`'s `unavailable[]` entries (per-platform content
+  gaps for Shopify/WordPress/Webflow/headless-CMS/SSG projects) into `coveragePct`, the same honesty
+  model the framework-code adapters already use. Previously deferred (see the now-corrected
+  `references/platform-coverage.md` and `platform_detect.py` docstring, which claimed this was
+  wired in before it actually was). Excluded entirely, not scored zero, when no such platform is
+  detected, so an ordinary framework-code-only project's `score` is unaffected -- its `coveragePct`
+  denominator grows by 5 (the same way the pre-existing `local` category's 5 points already lower
+  coveragePct for any non-local-business project), which is why `examples/worked-example-nextjs`'s
+  golden `expected-audit*.json` coverage figures were updated alongside this change (71.0 -> 67.6,
+  i.e. 71/105*100 -- `score` itself is unaffected, 58.3/73.2 unchanged, since `platform` is excluded
+  from the denominator entirely for this plain-Next.js fixture, not scored zero; this is the rubric
+  doing exactly what it's designed to do, not a regression).
 
 ### Documented
 - `SKILL.md`, `references/assurance-model.md`: the Guardian hook's session scope does not extend

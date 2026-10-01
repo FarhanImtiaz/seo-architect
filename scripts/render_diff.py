@@ -25,10 +25,14 @@ def main():
             text=p.read_text(errors='ignore')
             if re.search(r'<meta[^>]+noindex',text,re.I): fs.append({'severity':'INFO','file':name,'issue':'Response HTML contains noindex -- per Google, a noindex found in the initial response means rendering is skipped entirely for this page.'})
         print(json.dumps({'tool':'render-diff','findings':fs,'notes':['No --rendered input given; only compared response/build HTML against itself for a noindex-skips-rendering signal. Pass --rendered (a post-JS DOM dump) to compare what changes after JavaScript runs.']},indent=2)); return 0
-    rend=_load(a.rendered); checked=0
+    rend=_load(a.rendered); checked=0; unmatched=[]
     for name,rp in resp.items():
-        matched=rend.get(name) or rend.get(Path(name).name)
-        if not matched: continue
+        # Full relative-path match ONLY -- a basename-only fallback used to pair unrelated files
+        # (e.g. response "blog/index.html" with a rendered root "index.html" just because both
+        # happen to be named "index.html"), producing false findings on two different pages.
+        matched=rend.get(name)
+        if not matched:
+            unmatched.append(name); continue
         checked+=1
         rtext=rp.read_text(errors='ignore'); dtext=matched.read_text(errors='ignore')
         r_canon=re.search(r'rel=["\']canonical["\'][^>]*href=["\']([^"\']+)',rtext,re.I)
@@ -47,6 +51,8 @@ def main():
         if d_ld>r_ld: fs.append({'severity':'MEDIUM','file':name,'issue':f'{d_ld-r_ld} JSON-LD block(s) exist only after rendering.'})
         r_words=len(re.sub(r'<[^>]+>',' ',rtext).split()); d_words=len(re.sub(r'<[^>]+>',' ',dtext).split())
         if d_words>0 and r_words<d_words*0.5: fs.append({'severity':'LOW','file':name,'issue':f'Response HTML has {r_words} words vs. {d_words} rendered -- most content depends on JavaScript.'})
-    print(json.dumps({'tool':'render-diff','findings':fs,'notes':[f'Compared {checked} matched file(s) between --response and --rendered.']},indent=2))
+    notes=[f'Compared {checked} matched file(s) between --response and --rendered (matched by identical relative path only, never by basename alone).']
+    if unmatched: notes.append(f'{len(unmatched)} response file(s) had no same-relative-path match under --rendered and were skipped, not guessed at: {sorted(unmatched)[:20]}')
+    print(json.dumps({'tool':'render-diff','findings':fs,'notes':notes},indent=2))
     return 1 if any(f['severity'] in ('CRITICAL','HIGH') for f in fs) else 0
 if __name__=='__main__': raise SystemExit(main())

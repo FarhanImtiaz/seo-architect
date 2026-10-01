@@ -5,7 +5,7 @@
     {"check": "jsonld", "severity": "HIGH", "rule": "missing-required"}
   ],
   "score": 58.3,
-  "coveragePct": 71.0,
+  "coveragePct": 67.6,
   "categories": {
     "technical": {"status": "evidenced", "earned": 4.0},
     "ia": {"status": "evidenced", "earned": 6.0},
@@ -15,6 +15,7 @@
     "schema": {"status": "evidenced", "earned": 5.0},
     "performance": {"status": "evidenced", "earned": 3.0},
     "local": {"status": "unavailable"},
-    "aeo": {"status": "evidenced", "earned": 0.0}
+    "aeo": {"status": "evidenced", "earned": 0.0},
+    "platform": {"status": "unavailable"}
   }
 }
