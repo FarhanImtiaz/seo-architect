@@ -1,0 +1,5 @@
+[
+ {"id":"SYNTH-A","begin":"2026-02-01T10:00:00+00:00","end":"2026-02-14T10:00:00+00:00","external_desc":"SYNTHETIC test incident: core update","updates":[]},
+ {"id":"SYNTH-B","begin":"not-a-date","external_desc":"SYNTHETIC malformed date, must be skipped","updates":[]},
+ {"id":"","begin":"2026-03-01T00:00:00+00:00","external_desc":"SYNTHETIC missing id, must be skipped"}
+]

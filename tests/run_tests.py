@@ -1339,6 +1339,29 @@ def seo_tools_max_files_env_cap_bounds_scan_time_on_a_large_tree():
   assert r.returncode in (0,1), r.stderr
   assert elapsed<30, f'a 5000-file tree with SEO_ARCHITECT_MAX_FILES=200 took {elapsed:.1f}s -- the cap is not bounding scan time'
 
+@test
+def impact_events_fetch_google_requires_explicit_approval():
+ # The network fetch is opt-in per call: without --approve-network-fetch the script must refuse
+ # and must not create or modify the events file.
+ p=Path(tempfile.mkdtemp())
+ r=subprocess.run([sys.executable,str(IMPACT),'events',str(p),'fetch-google'],capture_output=True,text=True)
+ assert r.returncode==2, r.stdout+r.stderr
+ assert 'approve-network-fetch' in r.stdout, r.stdout
+ assert not (p/'.claude/seo/external-events.json').exists()
+
+@test
+def impact_google_incident_parser_is_strict_and_dedupes_by_id():
+ # Parsing the public incident feed must skip malformed entries (bad date, missing id) rather
+ # than inventing an event from them, and must keep the incident id so reruns can dedupe.
+ import importlib.util
+ spec=importlib.util.spec_from_file_location('impact_mod',str(IMPACT)); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+ incidents=json.loads((IMPACTFIX/'google-incidents-sample.json').read_text())
+ events=m._google_incidents_to_events(incidents)
+ assert [e['incidentId'] for e in events]==['SYNTH-A'], events
+ assert events[0]['date']=='2026-02-01' and events[0]['type']=='google-incident', events[0]
+ assert events[0]['endDate']=='2026-02-14', events[0]
+
+
 def main():
  failures=[]
  for fn in TESTS:

@@ -10,6 +10,14 @@ when you bump the rubric, add a dated entry below that states the new rubric ver
 
 ## [Unreleased]
 
+### Added
+- `scripts/impact.py events fetch-google`: pulls Google's public Search Status incident feed
+  (`status.search.google.com/incidents.json`, fixed URL, no user-supplied URL) into
+  `.claude/seo/external-events.json` so `evaluate`'s confounder check can see algorithm updates.
+  Requires `--approve-network-fetch` on every call. Incidents are deduped by id on rerun, and
+  malformed entries (bad date, missing id) are skipped rather than invented. Previously a stub
+  that always refused.
+
 ### Changed — rubric version 2 (2026-10-01)
 - Added a `platform` category (5 points, check `platform-content-visible`) to `scripts/rubric.json`
   and `scripts/score.py`: wires `platform_detect.py`'s `unavailable[]` entries (per-platform content

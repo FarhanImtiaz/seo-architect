@@ -50,6 +50,27 @@ def _load_change(root,change_id):
     if not p.exists(): return None,p
     return json.loads(p.read_text()),p
 
+GOOGLE_INCIDENTS_URL='https://status.search.google.com/incidents.json'
+
+def _fetch_google_incidents():
+    import urllib.request
+    with urllib.request.urlopen(GOOGLE_INCIDENTS_URL,timeout=20) as r:
+        data=json.loads(r.read().decode('utf-8'))
+    if not isinstance(data,list): raise ValueError('expected a JSON list of incidents')
+    return data
+
+def _google_incidents_to_events(incidents):
+    out=[]
+    for inc in incidents:
+        if not isinstance(inc,dict): continue
+        begin=str(inc.get('begin') or '')[:10]; iid=str(inc.get('id') or '')
+        desc=str(inc.get('external_desc') or '').strip()
+        if not (begin and iid and desc): continue
+        try: datetime.strptime(begin,'%Y-%m-%d')
+        except ValueError: continue
+        out.append({'date':begin,'description':desc,'type':'google-incident','source':'status.search.google.com','incidentId':iid,'endDate':str(inc.get('end') or '')[:10] or None})
+    return out
+
 def _load_events(root):
     p=_events_path(root)
     if not p.exists(): return []
@@ -170,7 +191,18 @@ def cmd_events(root,a):
     if a.events_action=='list':
         print(json.dumps(data,indent=2)); return 0
     if a.events_action=='fetch-google':
-        print(json.dumps({'tool':'impact-events','action':'fetch-google','error':'Not run automatically. Re-invoke with the user\'s explicit approval; this build does not perform the network fetch without that approval gate being satisfied by the caller.'},indent=2)); return 1
+        if not a.approve_network_fetch:
+            print(json.dumps({'tool':'impact-events','action':'fetch-google','error':'Network fetch requires --approve-network-fetch. Only pass it after the user has explicitly asked to pull Google\'s public incident history.'},indent=2)); return 2
+        try: incidents=_fetch_google_incidents()
+        except (OSError,ValueError) as e:
+            print(json.dumps({'tool':'impact-events','action':'fetch-google','error':f'could not fetch or parse {GOOGLE_INCIDENTS_URL}: {e}. No events were changed.'},indent=2)); return 1
+        known={e.get('incidentId') for e in data['events'] if e.get('incidentId')}
+        added=[]
+        for ev in _google_incidents_to_events(incidents):
+            if ev['incidentId'] in known: continue
+            data['events'].append(ev); added.append(ev)
+        p.parent.mkdir(parents=True,exist_ok=True); p.write_text(json.dumps(data,indent=2)+'\n')
+        print(json.dumps({'tool':'impact-events','action':'fetch-google','source':GOOGLE_INCIDENTS_URL,'incidentsInFeed':len(incidents),'added':len(added),'skippedAlreadyKnown':len(incidents)-len(added)},indent=2)); return 0
 
 MIN_PLACEBO_WINDOWS=8  # below this, empirical variance is too noisy to trust; cap at no-detectable-change
 MDE_FLOOR=0.02  # a placebo band can never be narrower than this -- flat/near-zero-variance history must
@@ -437,7 +469,7 @@ def main():
     i=sub.add_parser('import'); i.add_argument('project'); i.add_argument('id'); i.add_argument('measurement_file'); i.add_argument('--label',choices=['treated','control','site']); i.add_argument('--supersedes',help="the path/filename of a previously-attached file under the same label that this import is a refreshed copy of (its overlapping dates are replaced, not summed)"); i.add_argument('--combine',action='store_true',help='this file is genuinely additive with other attached files under the same label (e.g. a different page\'s export) -- overlapping dates are summed, not replaced')
     s=sub.add_parser('status'); s.add_argument('project'); s.add_argument('id')
     e=sub.add_parser('evaluate'); e.add_argument('project'); e.add_argument('id'); e.add_argument('--allow-synthetic',action='store_true'); e.add_argument('--as-of')
-    ev=sub.add_parser('events'); ev.add_argument('project'); ev.add_argument('events_action',choices=['add','list','fetch-google']); ev.add_argument('--date',dest='date_'); ev.add_argument('--description'); ev.add_argument('--type',dest='type_')
+    ev=sub.add_parser('events'); ev.add_argument('project'); ev.add_argument('events_action',choices=['add','list','fetch-google']); ev.add_argument('--date',dest='date_'); ev.add_argument('--description'); ev.add_argument('--type',dest='type_'); ev.add_argument('--approve-network-fetch',action='store_true')
     a=q.parse_args()
     root=Path(a.project).resolve()
     if not root.is_dir(): print(f'ERROR: project directory does not exist: {root}',file=sys.stderr); return 2
