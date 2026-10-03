@@ -4,7 +4,7 @@
     "Required citation form: \"Documented pattern (Source, tier X): mechanism. Applicability here: [observed/inference]. Expected effect on this site: unknown until measured.\"",
     "Never transfer another company's metrics to the user's site as a forecast.",
     "Tier C sources: cite mechanism/structure only, never quote a number (numbersQuotable is always false).",
-    "A pattern never overrides an evidence gate in SKILL.md \u2014 it is context for a decision, not a shortcut around one.",
+    "A pattern never overrides an evidence gate in SKILL.md — it is context for a decision, not a shortcut around one.",
     "lastVerified:\"pending\" means a human has not yet opened and confirmed the source; do not silently upgrade its tier or treat it as more certain than that."
   ],
   "sources": [
@@ -173,7 +173,7 @@
       "tier": "B",
       "lastVerified": "2026-09-27",
       "mechanism": "Eventbrite adopted Event structured data across event pages.",
-      "caveats": "Eventbrite's own case study notes multiple concurrent SEO projects make attribution difficult \u2014 quote that caveat whenever this is cited.",
+      "caveats": "Eventbrite's own case study notes multiple concurrent SEO projects make attribution difficult — quote that caveat whenever this is cited.",
       "numbersQuotable": true,
       "volatile": false
     },
@@ -199,7 +199,7 @@
       "tier": "B",
       "lastVerified": "pending",
       "mechanism": "Google restricted FAQ rich results to authoritative government/health sites and deprecated HowTo rich results in desktop search, Aug 2023.",
-      "caveats": "Attempted fetch 2026-09-27 only returned Google Search Central's blog archive/index listing, not the actual article body -- could not directly confirm the specific FAQ/HowTo restriction wording from source text. The change is widely corroborated by third-party SEO reporting from Aug 2023, but a human should open the direct article URL to confirm current wording before quoting specifics, especially given this entry is already flagged volatile.",
+      "caveats": "Fetched 2026-10-03: the URL returns only the blog archive listing, not the article body, so the FAQ/HowTo restriction wording could not be confirmed. Open the article in a browser and check it.",
       "numbersQuotable": true,
       "volatile": true
     },
@@ -301,9 +301,9 @@
       "url": "https://developers.google.com/search/blog/2024/03/core-update-spam-policies",
       "type": "platform-doc",
       "tier": "B",
-      "lastVerified": "pending",
-      "mechanism": "Defines 'scaled content abuse' \u2014 templated pages generated at scale without unique value per page \u2014 as a policy violation.",
-      "caveats": "Attempted fetch 2026-09-27 only returned Google Search Central's blog archive/index listing, not the article body -- could not directly confirm the exact 'scaled content abuse' policy wording from source text. This is a mandatory guardrail for the programmatic-pages pattern (P09), so a human should open the direct article URL and confirm the current wording before this card is relied on for a real doorway-page judgment call.",
+      "lastVerified": "2026-10-03",
+      "mechanism": "Defines 'scaled content abuse' — templated pages generated at scale without unique value per page — as a policy violation.",
+      "caveats": "Fetched 2026-10-03: the article defines scaled content abuse as many pages generated primarily to manipulate rankings, typically unoriginal content that adds little value. Matches the mechanism.",
       "numbersQuotable": true,
       "volatile": false
     },
@@ -316,7 +316,7 @@
       "tier": "B",
       "lastVerified": "pending",
       "mechanism": "Foundational SEO practices (indexability, clear answers, unique detail) are what AI features rely on; no separate ranking system.",
-      "caveats": "Attempted fetch 2026-09-27 only returned Google Search Central's blog archive/index listing, not the article body -- could not directly confirm the specific guidance wording. A human should open the direct article URL to confirm before this is relied on heavily for AEO decisions.",
+      "caveats": "Fetched 2026-10-03: the article body supports \"focus on visitors, provide unique satisfying content\". The card's \"no separate ranking system\" wording was not found in the body. Check the article before relying on that line.",
       "numbersQuotable": true,
       "volatile": false
     },
@@ -327,9 +327,9 @@
       "url": "https://arxiv.org/abs/2311.09735",
       "type": "academic",
       "tier": "B",
-      "lastVerified": "pending",
+      "lastVerified": "2026-10-03",
       "mechanism": "Lab benchmark found that adding citations, quotations, and statistics improved a page's visibility within a research-controlled generative-engine benchmark.",
-      "caveats": "Fetched the abstract on 2026-09-27: it confirms the paper is a research-stage benchmark (GEO-bench) with a headline 'up to 40% visibility boost' claim and that efficacy varies by domain, but the abstract does NOT itemize which specific tactics (citations/quotations/statistics) were tested -- that detail would require reading the full paper, which was not done. Do not quote the 40% figure; it is unconfirmed which techniques produced it and it's a lab benchmark, not a production measurement.",
+      "caveats": "Full PDF fetched 2026-10-03: the paper tests Cite Sources, Quotation Addition and Statistics Addition as GEO methods. Lab benchmark only. The up-to-40% visibility figure is the paper's own claim and must not be quoted.",
       "numbersQuotable": true,
       "volatile": false
     },
@@ -353,9 +353,9 @@
       "url": "https://developers.google.com/search/docs/specialty/international/localized-versions",
       "type": "platform-doc",
       "tier": "B",
-      "lastVerified": "pending",
+      "lastVerified": "2026-10-03",
       "mechanism": "hreflang requirements: reciprocal links, self-reference, x-default.",
-      "caveats": "Fetch returned HTTP 403 on 2026-09-27 despite being a Google Search Central doc (transient block, not a content issue) -- a human should retry and confirm; the requirements described here (reciprocal links, self-reference, x-default) are standard, well-established hreflang documentation, but this specific fetch attempt did not succeed.",
+      "caveats": "Fetched 2026-10-03: the doc requires return links, each version listing itself, and recommends x-default. Matches the mechanism.",
       "numbersQuotable": true,
       "volatile": false
     },
