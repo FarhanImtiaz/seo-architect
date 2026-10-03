@@ -1,7 +1,7 @@
 {
   "name": "seo-architect",
   "description": "SEO and AEO engineering skill for auditing, planning, implementing, and validating search visibility across web projects.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "See CHANGELOG.md for the version history this number tracks.",
   "license": "MIT",
   "skills": ["skills/seo-architect/SKILL.md"],
