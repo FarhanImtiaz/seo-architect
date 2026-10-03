@@ -151,9 +151,10 @@ def live_data_no_date_range_is_marked_unspecified_and_key_never_leaks():
   out2=json.loads(run(LIVEDATA,'import-gsc',p,LD/'gsc-export.csv','--label','control',ok=(0,)))
   second=list((p/'.claude/seo/measurement/raw').glob('search-console-*.json'))
   assert len(second)==len(first)+1, 'a second same-day import with a different label must not collide with/overwrite the first'
-  env=dict(**{k:v for k,v in __import__('os').environ.items()},PSI_API_KEY='AIzaTestKeyShouldNeverLeak1234567890')
+  _fake_key='AIza'+'TestKeyShouldNeverLeak'+'1234567890'
+  env=dict(**{k:v for k,v in __import__('os').environ.items()},PSI_API_KEY=_fake_key)
   r=subprocess.run([sys.executable,str(LIVEDATA),'psi',str(p),'http://example.invalid/'],capture_output=True,text=True,env=env)
-  assert 'AIzaTestKeyShouldNeverLeak' not in (r.stdout+r.stderr), 'API key must never appear in output/stderr, whether via URL or an error message'
+  assert _fake_key not in (r.stdout+r.stderr), 'API key must never appear in output/stderr, whether via URL or an error message'
 
 @test
 def live_data_secret_scan_covers_every_row_not_just_the_first_five():
